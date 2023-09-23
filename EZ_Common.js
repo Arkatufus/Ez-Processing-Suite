@@ -1,3 +1,6 @@
+// Copyright (C) 2020-2023 S Dimant (aka darkarchon#4313)
+// File name: EZ_common.js
+
 /*
 	Acknowledgements
 		 Andres del Pozo for his PreviewControl.js
