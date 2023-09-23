@@ -1,3 +1,6 @@
+// Copyright (C) 2020-2023 S Dimant (aka darkarchon#4313)
+// File name: EZ_SoftStretch.js
+
 /*
  * ------------------- Version 2020-06-03 --------------------
  * tested on PixInsight 1.8.8-5 Ripley

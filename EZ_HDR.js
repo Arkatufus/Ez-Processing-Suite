@@ -1,3 +1,6 @@
+// Copyright (C) 2020-2023 S Dimant (aka darkarchon#4313)
+// File name: EZ_HDR.js
+
 #feature-id EZ Processing Suite > EZ HDR
 
 var NAME = 'EZ HDR';
