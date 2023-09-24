@@ -47,24 +47,24 @@ function saveSettings() {
 }
 
 function generateProcessingInfo() {
-	let starReductionInfo = new SoftStrechInfo();
-	starReductionInfo.mainViewId = null;
-	starReductionInfo.htExpandLow = readFromSettingsOrDefault("EZSoftStretch.ExpandLow", 10, 0.05);
-	starReductionInfo.zeroInWhitePoint = readFromSettingsOrDefault("EZSoftStretch.ZeroInWhitePoint", 0, false);
-	starReductionInfo.slopeConfidence = readFromSettingsOrDefault("EZSoftStretch.SlopeConfidence", 10, 95);
-	starReductionInfo.aggressiveness = readFromSettingsOrDefault("EZSoftStretch.ClipAggressiveness", 1, 10);
-	starReductionInfo.medianTarget = readFromSettingsOrDefault("EZSoftStretch.MedianTarget", 10, 0.2);
-	return starReductionInfo;
+	let processingInfo = new SoftStrechInfo();
+	processingInfo.mainViewId = null;
+	processingInfo.htExpandLow = readFromSettingsOrDefault("EZSoftStretch.ExpandLow", 10, 0.05);
+	processingInfo.zeroInWhitePoint = readFromSettingsOrDefault("EZSoftStretch.ZeroInWhitePoint", 0, false);
+	processingInfo.slopeConfidence = readFromSettingsOrDefault("EZSoftStretch.SlopeConfidence", 10, 95);
+	processingInfo.aggressiveness = readFromSettingsOrDefault("EZSoftStretch.ClipAggressiveness", 1, 10);
+	processingInfo.medianTarget = readFromSettingsOrDefault("EZSoftStretch.MedianTarget", 10, 0.2);
+	return processingInfo;
 }
 
 function execute(window) {
 	let mainView = window.mainView;
 	mainView.window.bringToFront();
 
-	writeMessageStart("Running SoftStretch");
+	ConsoleWriter.writeMessageStart("Running SoftStretch");
 	doSoftStretch(mainView);
 
-	writeMessageEnd("Stretching complete");
+	ConsoleWriter.writeMessageEnd("Stretching complete");
 }
 
 // #endregion "Main"
@@ -132,8 +132,8 @@ function doSoftStretch(view) {
 			}
 		}
 
-		writeMessageStart("Detecting HT slope for channel " + rgbc);
-		writeMessageBlock("", false, true);
+		ConsoleWriter.writeMessageStart("Detecting HT slope for channel " + rgbc);
+		ConsoleWriter.writeMessageBlock("", false, true);
 		let y = [];
 		let y2 = [];
 		let x = [];
@@ -154,12 +154,12 @@ function doSoftStretch(view) {
 		blackPointADU[rgbc] = parseInt(-(c / m));
 
 		processEvents();
-		writeMessageBlock("HT Slope origin for channel " + rgbc + " determined at x=" + blackPointADU[rgbc], false, true);
-		writeMessageBlock("Confidence R²: " + (r2 * 100).toFixed(2) + "%, Steepness: " + m.toFixed(2), false, true);
+		ConsoleWriter.writeMessageBlock("HT Slope origin for channel " + rgbc + " determined at x=" + blackPointADU[rgbc], false, true);
+		ConsoleWriter.writeMessageBlock("Confidence R²: " + (r2 * 100).toFixed(2) + "%, Steepness: " + m.toFixed(2), false, true);
 		if (blackPointADU[rgbc] == 0) {
-			writeWarningBlock("No HT slope origin found for channel " + rgbc, false, true);
+			ConsoleWriter.writeWarningBlock("No HT slope origin found for channel " + rgbc, false, true);
 		}
-		writeMessageEnd("");
+		ConsoleWriter.writeMessageEnd("");
 	}
 
 	if(histogramMatrix.rows == 1) { 
@@ -184,41 +184,41 @@ function doSoftStretch(view) {
 	let whitePointNorm = Math.maxElem(whitePointADU) / (histogramMatrix.cols-1);
 	let blackPointNorm = Math.minElem(blackPointADU) / (histogramMatrix.cols-1);
 
-	writeMessageStart("Calculated value info");
-	writeMessageBlock("", false, true);
-	writeMessageBlock("Total PX             : " + totalPixels, false, true);
-	writeMessageBlock("BlackPoint ADU       : " + blackPointADU, false, true);
-	writeMessageBlock("BlackPoint ADU Min   : " + Math.minElem(blackPointADU), false, true);
-	writeMessageBlock("BlackPoint Normalized: " + blackPointNorm, false, true);
-	writeMessageBlock("Total Clipped Pixels : " + Math.sum(clippedPixels) + " (" + ((Math.sum(clippedPixels)/totalPixels)*100).toFixed(4) + "%)", false, true);
-	writeMessageBlock("WhitePoint ADU       : " + whitePointADU, false, true);
-	writeMessageBlock("WhitePoint ADU Max   : " + Math.maxElem(whitePointADU), false, true);
-	writeMessageBlock("WhitePoint Normalized: " + whitePointNorm, false, true);
-	writeMessageBlock("Median ADU           : " + medianADU, false, true);
-	writeMessageBlock("Median ADU Min       : " + Math.minElem(medianADU), false, true);
-	writeMessageBlock("Median Normalized    : " + medianNorm, false, true);
-	writeMessageEnd("");
+	ConsoleWriter.writeMessageStart("Calculated value info");
+	ConsoleWriter.writeMessageBlock("", false, true);
+	ConsoleWriter.writeMessageBlock("Total PX             : " + totalPixels, false, true);
+	ConsoleWriter.writeMessageBlock("BlackPoint ADU       : " + blackPointADU, false, true);
+	ConsoleWriter.writeMessageBlock("BlackPoint ADU Min   : " + Math.minElem(blackPointADU), false, true);
+	ConsoleWriter.writeMessageBlock("BlackPoint Normalized: " + blackPointNorm, false, true);
+	ConsoleWriter.writeMessageBlock("Total Clipped Pixels : " + Math.sum(clippedPixels) + " (" + ((Math.sum(clippedPixels)/totalPixels)*100).toFixed(4) + "%)", false, true);
+	ConsoleWriter.writeMessageBlock("WhitePoint ADU       : " + whitePointADU, false, true);
+	ConsoleWriter.writeMessageBlock("WhitePoint ADU Max   : " + Math.maxElem(whitePointADU), false, true);
+	ConsoleWriter.writeMessageBlock("WhitePoint Normalized: " + whitePointNorm, false, true);
+	ConsoleWriter.writeMessageBlock("Median ADU           : " + medianADU, false, true);
+	ConsoleWriter.writeMessageBlock("Median ADU Min       : " + Math.minElem(medianADU), false, true);
+	ConsoleWriter.writeMessageBlock("Median Normalized    : " + medianNorm, false, true);
+	ConsoleWriter.writeMessageEnd("");
 
 	if(blackPointNorm == 0 || blackPointNorm+"" == "NaN") {
 		blackPointNorm = 0;
-		writeWarningBlock("Could not determine blackpoint of histogram, decrease aggressiveness and try again. Assuming 0.");
+		ConsoleWriter.writeWarningBlock("Could not determine blackpoint of histogram, decrease aggressiveness and try again. Assuming 0.");
 	}
 
 	if(medianNorm < blackPointNorm) {
 		blackPointNorm = 0;
-		writeWarningBlock("Median ADU was smaller than blackpoint ADU. Something went terribly, terribly wrong during calculation. Maybe adjust aggressiveness? Assuming 0.");
+		ConsoleWriter.writeWarningBlock("Median ADU was smaller than blackpoint ADU. Something went terribly, terribly wrong during calculation. Maybe adjust aggressiveness? Assuming 0.");
 	}
 
 	let newMedianTarget = (CurrentProcessingInfo.medianTarget*(whitePointNorm/1)
 		-CurrentProcessingInfo.htExpandLow*(whitePointNorm/1));
-	writeMessageBlock("Calculating Median Transfer Function to target " + newMedianTarget.toFixed(2) + " (Median (" + CurrentProcessingInfo.medianTarget*(whitePointNorm/1) +")-low expand ("+CurrentProcessingInfo.htExpandLow*(whitePointNorm/1)+"))");
+	ConsoleWriter.writeMessageBlock("Calculating Median Transfer Function to target " + newMedianTarget.toFixed(2) + " (Median (" + CurrentProcessingInfo.medianTarget*(whitePointNorm/1) +")-low expand ("+CurrentProcessingInfo.htExpandLow*(whitePointNorm/1)+"))");
 	processEvents();
 	///((1+CurrentProcessingInfo.htExpandLow)/1);
 	var mtfNorm = 1-findMidtonesBalance(medianNorm-blackPointNorm, newMedianTarget, 0.00000001);
 		//((1+CurrentProcessingInfo.htExpandLow)/1)
 
-	//console.writeln(CurrentProcessingInfo.medianTarget + " / " + CurrentProcessingInfo.htExpandLow);
-	//console.writeln(newMedianTarget+"="+mtfNorm);
+	//Console.writeln(CurrentProcessingInfo.medianTarget + " / " + CurrentProcessingInfo.htExpandLow);
+	//Console.writeln(newMedianTarget+"="+mtfNorm);
 
 	// stretch
 	var HT = new HistogramTransformation;
@@ -238,14 +238,14 @@ function doSoftStretch(view) {
 //#endregion "Do"
 
 function customizeDialog() {
-	dialog.infoBox.text = "<b>EZ Soft Stretch:</b> A script to easily delinearize an image non-aggressively to a state that allows further post-processing in the non-linear state. Ideally is run after using EZ Denoise.";
+	GlobalDialog.infoBox.text = "<b>EZ Soft Stretch:</b> A script to easily delinearize an image non-aggressively to a state that allows further post-processing in the non-linear state. Ideally is run after using EZ Denoise.";
 
-	dialog.tutorialPrerequisites = [
+	GlobalDialog.tutorialPrerequisites = [
 		"Image is cropped properly",
 		"Image is not stretched (image is linear)",
 		"Image is color calibrated (RGB)"
 	];
-	dialog.tutorialSteps = ["Select image or preview to apply to",
+	GlobalDialog.tutorialSteps = ["Select image or preview to apply to",
 		"Stretch Preview will open that shows you what the image will be stretched to",
 		"If result is not adequate read the console messages",
 		"To adjust the stretch strength adjust 'Target Median', 'Expand Low' and 'Zero in White Point'",
@@ -254,51 +254,51 @@ function customizeDialog() {
 		"Once happy Run EZ Soft Stretch"
 	];
 
-	dialog.prevMedianTarget = CurrentProcessingInfo.medianTarget;
-	dialog.prevHtExpandLow = CurrentProcessingInfo.htExpandLow;
-	dialog.prevZeroIn = CurrentProcessingInfo.zeroInWhitePoint;
-	dialog.prevAggressive = CurrentProcessingInfo.aggressiveness;
-	dialog.isRendering = false;
+	GlobalDialog.prevMedianTarget = CurrentProcessingInfo.medianTarget;
+	GlobalDialog.prevHtExpandLow = CurrentProcessingInfo.htExpandLow;
+	GlobalDialog.prevZeroIn = CurrentProcessingInfo.zeroInWhitePoint;
+	GlobalDialog.prevAggressive = CurrentProcessingInfo.aggressiveness;
+	GlobalDialog.isRendering = false;
 
-	dialog.customBindings = function() {
-		if(dialog.isSliding || dialog.isRendering) return;
+	GlobalDialog.customBindings = function() {
+		if(GlobalDialog.isSliding || GlobalDialog.isRendering) return;
 		let anyChanges = false;
-		if(CurrentProcessingInfo.aggressiveness != dialog.prevAggressive) {
-			anyChanges = true; dialog.prevAggressive = CurrentProcessingInfo.aggressiveness;
+		if(CurrentProcessingInfo.aggressiveness != GlobalDialog.prevAggressive) {
+			anyChanges = true; GlobalDialog.prevAggressive = CurrentProcessingInfo.aggressiveness;
 		}
-		if(CurrentProcessingInfo.htExpandLow != dialog.prevHtExpandLow) {
-			anyChanges = true; dialog.prevHtExpandLow = CurrentProcessingInfo.htExpandLow;
+		if(CurrentProcessingInfo.htExpandLow != GlobalDialog.prevHtExpandLow) {
+			anyChanges = true; GlobalDialog.prevHtExpandLow = CurrentProcessingInfo.htExpandLow;
 		}
-		if(CurrentProcessingInfo.zeroInWhitePoint != dialog.prevZeroIn) {
-			anyChanges = true; dialog.prevZeroIn = CurrentProcessingInfo.zeroInWhitePoint;
+		if(CurrentProcessingInfo.zeroInWhitePoint != GlobalDialog.prevZeroIn) {
+			anyChanges = true; GlobalDialog.prevZeroIn = CurrentProcessingInfo.zeroInWhitePoint;
 		}
-		if(CurrentProcessingInfo.medianTarget != dialog.prevMedianTarget) {
-			anyChanges = true; dialog.prevMedianTarget = CurrentProcessingInfo.medianTarget;
+		if(CurrentProcessingInfo.medianTarget != GlobalDialog.prevMedianTarget) {
+			anyChanges = true; GlobalDialog.prevMedianTarget = CurrentProcessingInfo.medianTarget;
 		}
 		if(CurrentProcessingInfo.mainViewId != null && anyChanges) {
-			dialog.isRendering = true;
-			startProcessing();
-			dialog.stretchControl.forceRerender();
-			dialog.bitmap = generateHistogramImage(dialog.stretchControl.previewFrameWindow.mainView);
-			dialog.histogramFrame.repaint();
-			stopProcessing();
-			dialog.isRendering = false;
+			GlobalDialog.isRendering = true;
+			JobStack.startProcessing();
+			GlobalDialog.stretchControl.forceRerender();
+			GlobalDialog.bitmap = generateHistogramImage(GlobalDialog.stretchControl.previewFrameWindow.mainView);
+			GlobalDialog.histogramFrame.repaint();
+			JobStack.stopProcessing();
+			GlobalDialog.isRendering = false;
 		}
 
 	}
 
-	dialog.onSelectedMainView = function() {
-		if(dialog.stretchControl != null) {
-			dialog.stretchControl.SetView(View.viewById(CurrentProcessingInfo.mainViewId), false);
-			dialog.tabBox.show();
-			dialog.bitmap = generateHistogramImage(dialog.stretchControl.previewFrameWindow.mainView);
-			dialog.histogramFrame.update();
+	GlobalDialog.onSelectedMainView = function() {
+		if(GlobalDialog.stretchControl != null) {
+			GlobalDialog.stretchControl.SetView(View.viewById(CurrentProcessingInfo.mainViewId), false);
+			GlobalDialog.tabBox.show();
+			GlobalDialog.bitmap = generateHistogramImage(GlobalDialog.stretchControl.previewFrameWindow.mainView);
+			GlobalDialog.histogramFrame.update();
 			return;
 		};
 
-		dialog.stretchControl = new PreviewControl(dialog, true, false);
+		GlobalDialog.stretchControl = new PreviewControl(GlobalDialog, true, false);
 
-		dialog.stretchControl.computeOrgImage = function() {
+		GlobalDialog.stretchControl.computeOrgImage = function() {
 			if(this.previewFrameWindow != null && !this.previewFrameWindow.isNull) {
 				this.previewFrameWindow.forceClose();
 			}
@@ -309,31 +309,31 @@ function customizeDialog() {
 			doSoftStretch(this.previewFrameWindow.mainView);
 		}
 
-		dialog.stretchControl.SetView(View.viewById(CurrentProcessingInfo.mainViewId), false);
+		GlobalDialog.stretchControl.SetView(View.viewById(CurrentProcessingInfo.mainViewId), false);
 
-		dialog.tabBox.addPage(dialog.stretchControl, "Stretch Preview");
+		GlobalDialog.tabBox.addPage(GlobalDialog.stretchControl, "Stretch Preview");
 
-		dialog.stretchControl.infoFrame.hide();
+		GlobalDialog.stretchControl.infoFrame.hide();
 
-		dialog.tabBox.show();
+		GlobalDialog.tabBox.show();
 
-		dialog.bitmap = generateHistogramImage(dialog.stretchControl.previewFrameWindow.mainView);
-		dialog.histogramFrame.update();
+		GlobalDialog.bitmap = generateHistogramImage(GlobalDialog.stretchControl.previewFrameWindow.mainView);
+		GlobalDialog.histogramFrame.update();
 
-		dialog.adjustToContents();
+		GlobalDialog.adjustToContents();
 	}
 
-	dialog.onEmptyMainView = function() {
-		dialog.tabBox.hide();
-		dialog.adjustToContents();
+	GlobalDialog.onEmptyMainView = function() {
+		GlobalDialog.tabBox.hide();
+		GlobalDialog.adjustToContents();
 	}
-	dialog.onExit = function() {}
-	dialog.canRun = function() { return true; }
-	dialog.canEvaluate = function() { return true; }
+	GlobalDialog.onExit = function() {}
+	GlobalDialog.canRun = function() { return true; }
+	GlobalDialog.canEvaluate = function() { return true; }
 
 	//#region custom controls
-	dialog.zeroInWhitePointCheckBox = new CheckBox(dialog);
-	with (dialog.zeroInWhitePointCheckBox) {
+	GlobalDialog.zeroInWhitePointCheckBox = new CheckBox(GlobalDialog);
+	with (GlobalDialog.zeroInWhitePointCheckBox) {
 		toolTip = "Zeroes in the white point (might result in a more aggressive stretch)"
 		text = "Zero in White Point";
 		enabled = true;
@@ -346,8 +346,8 @@ function customizeDialog() {
 		}
 	}
 	
-	dialog.expandLowSlider = new NumericControl(dialog);
-	with (dialog.expandLowSlider) {
+	GlobalDialog.expandLowSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.expandLowSlider) {
 		label.text = "Expand Low";
 		label.minWidth = 130;
 		setRange(0, 0.2);
@@ -362,15 +362,15 @@ function customizeDialog() {
 			CurrentProcessingInfo.htExpandLow = value;
 		}
 		slider.onMousePress = function() {
-			dialog.isSliding = true;
+			GlobalDialog.isSliding = true;
 		}
 		slider.onMouseRelease = function() {
-			dialog.isSliding = false;
+			GlobalDialog.isSliding = false;
 		}
 	}
 
-	dialog.htMedianSlider = new NumericControl(dialog);
-	with (dialog.htMedianSlider) {
+	GlobalDialog.htMedianSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.htMedianSlider) {
 		label.text = "Target Median";
 		label.minWidth = 130;
 		slider.setRange(0, 100);
@@ -388,15 +388,15 @@ function customizeDialog() {
 			CurrentProcessingInfo.medianTarget = value;
 		}
 		slider.onMousePress = function() {
-			dialog.isSliding = true;
+			GlobalDialog.isSliding = true;
 		}
 		slider.onMouseRelease = function() {
-			dialog.isSliding = false;
+			GlobalDialog.isSliding = false;
 		}
 	}
 
-	dialog.aggressivenessSlider = new NumericControl(dialog);
-	with (dialog.aggressivenessSlider) {
+	GlobalDialog.aggressivenessSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.aggressivenessSlider) {
 		label.text = "Aggressiveness";
 		label.minWidth = 130;
 		toolTip = "Attempts to adjust the histogram clipping point. Increase to clip more.";
@@ -412,18 +412,18 @@ function customizeDialog() {
 			CurrentProcessingInfo.aggressiveness = value;
 		}
 		slider.onMousePress = function() {
-			dialog.isSliding = true;
+			GlobalDialog.isSliding = true;
 		}
 		slider.onMouseRelease = function() {
-			dialog.isSliding = false;
+			GlobalDialog.isSliding = false;
 		}
 	}
 
-	dialog.resetButton = new PushButton(dialog);
-	with(dialog.resetButton) {
+	GlobalDialog.resetButton = new PushButton(GlobalDialog);
+	with(GlobalDialog.resetButton) {
 		text = "Reset Stretch Settings";
 		toolTip = "Reset Stretch to default settings";
-		icon = dialog.scaledResource(":/icons/debug-restart.png");
+		icon = GlobalDialog.scaledResource(":/icons/debug-restart.png");
 		onClick = function () {
 			CurrentProcessingInfo.htExpandLow = 0.05;
 			CurrentProcessingInfo.medianTarget = 0.2;
@@ -433,31 +433,31 @@ function customizeDialog() {
 	}
 	//#endregion
 
-	dialog.histogramFrame = new Control(dialog);
-	with(dialog.histogramFrame) {
+	GlobalDialog.histogramFrame = new Control(GlobalDialog);
+	with(GlobalDialog.histogramFrame) {
 		scaledMinWidth = 430;
 		scaledMinHeight = 200;
 	}
 
-	dialog.histogramFrame.onPaint = function (x0, y0, x1, y1) {
+	GlobalDialog.histogramFrame.onPaint = function (x0, y0, x1, y1) {
 		var graphics = new VectorGraphics(this);
 		graphics.antialiasing = true;
 		graphics.fillRect(x0, y0, x1, y1, new Brush(0xff202020));
-		if(dialog.bitmap != null) {
-			graphics.drawScaledBitmap(x0+5, y0+5, x1-5, y1-5, dialog.bitmap);
+		if(GlobalDialog.bitmap != null) {
+			graphics.drawScaledBitmap(x0+5, y0+5, x1-5, y1-5, GlobalDialog.bitmap);
 		}
 		graphics.end();
 	}
 
-	dialog.mainControl.sizer.insertItem(0, dialog.htMedianSlider);
-	dialog.mainControl.sizer.insertItem(1, dialog.expandLowSlider);
-	dialog.mainControl.sizer.insertItem(2, dialog.zeroInWhitePointCheckBox);
-	dialog.mainControl.sizer.insertItem(3, dialog.aggressivenessSlider);
-	dialog.mainControl.sizer.insertItem(4, dialog.resetButton);
-	//dialog.mainControl.sizer.insertItem(6, dialog.slopeDetectionIterationsSlider);
-	dialog.mainControl.sizer.insertItem(10, dialog.histogramFrame);
+	GlobalDialog.mainControl.sizer.insertItem(0, GlobalDialog.htMedianSlider);
+	GlobalDialog.mainControl.sizer.insertItem(1, GlobalDialog.expandLowSlider);
+	GlobalDialog.mainControl.sizer.insertItem(2, GlobalDialog.zeroInWhitePointCheckBox);
+	GlobalDialog.mainControl.sizer.insertItem(3, GlobalDialog.aggressivenessSlider);
+	GlobalDialog.mainControl.sizer.insertItem(4, GlobalDialog.resetButton);
+	//GlobalDialog.mainControl.sizer.insertItem(6, GlobalDialog.slopeDetectionIterationsSlider);
+	GlobalDialog.mainControl.sizer.insertItem(10, GlobalDialog.histogramFrame);
 
-	dialog.mainControl.bindings = function() {
+	GlobalDialog.mainControl.bindings = function() {
 		this.enabled = CurrentProcessingInfo.mainViewId != null;
 	}
 }
@@ -468,6 +468,7 @@ function SoftStrechInfo() {
 	this.zeroInWhitePoint = null;
 	this.slopeConfidence = null;
 	this.medianTarget = null;
+	this.aggressiveness = null;
 }
 
 SoftStrechInfo.prototype = new ProcessingInfo;

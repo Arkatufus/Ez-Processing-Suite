@@ -45,7 +45,7 @@ var AUTHOR = "S. Dimant";
 #define PSF_theta      10
 #define PSF_beta       11
 #define PSF_residual   12
-#define PSF_mad   	  12
+#define PSF_mad   	   12
 #define PSF_x0         13
 #define PSF_y0         14
 #define PSF_x1         15
@@ -63,6 +63,7 @@ var AUTHOR = "S. Dimant";
 
 function saveSettings() {
 	Settings.write("EZDecon.DownsampleStarNet", 0, CurrentProcessingInfo.downsampleStarnet);
+	Settings.write("EZDecon.UseStarNet2", 0, CurrentProcessingInfo.useStarNet2);
 	Settings.write("EZDecon.PSFMaxStars", 1, CurrentProcessingInfo.psfMaxStars);
 	Settings.write("EZDecon.DeconIterations", 1, CurrentProcessingInfo.deconIterations);
 	Settings.write("EZDecon.PixelMathIterations", 1, CurrentProcessingInfo.pixelMathIterations);
@@ -92,6 +93,7 @@ function generateProcessingInfo() {
 	deconInfo.backgroundBlending = readFromSettingsOrDefault("EZDecon.BackgroundBlending", 10, 1);
 	deconInfo.starSensitivity = readFromSettingsOrDefault("EZDecon.StarSensitivity", 10, 1.0);
 	deconInfo.downsampleStarnet = readFromSettingsOrDefault("EZDecon.DownsampleStarNet", 0, false);
+	deconInfo.useStarNet2 = readFromSettingsOrDefault("EZDecon.UseStarNet2", 0, false);
 	deconInfo.psfViewId = null;
 	deconInfo.psfMaxStars = readFromSettingsOrDefault("EZDecon.PSFMaxStars", 1, 50);
 	deconInfo.waveletStr = [readFromSettingsOrDefault("EZDecon.WaveletStr1", 10, 1),
@@ -112,8 +114,8 @@ function generateProcessingInfo() {
 }
 
 function execute(window, bringToFront = true, runOnMain = false) {
-	startProcessing();
-	writeMessageStart("Executing on " + window.currentView.id);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageStart("Executing on " + window.currentView.id);
 
 	let mainView = window.mainView;
 
@@ -132,7 +134,7 @@ function execute(window, bringToFront = true, runOnMain = false) {
 		workingView = cloneView(View.viewById(CurrentProcessingInfo.workingViewId), "_ez_temp_working_" + CurrentProcessingInfo.mainViewId);
 	}
 
-	writeMessageBlock("Running Deconvolution");
+	ConsoleWriter.writeMessageBlock("Running Deconvolution");
 
 	let orgVisible = workingView.window.visible;
 	if (orgVisible) {
@@ -142,14 +144,14 @@ function execute(window, bringToFront = true, runOnMain = false) {
 	workingView.window.removeMask();
 	doDecon(workingView);
 
-	writeMessageBlock("Running PixelMath to replace stars");
+	ConsoleWriter.writeMessageBlock("Running PixelMath to replace stars");
 	doPixelMathMask(workingView,
 		CurrentProcessingInfo.originalViewId,
 		CurrentProcessingInfo.starMaskId, CurrentProcessingInfo.pixelMathIterations,
 		View.viewById(CurrentProcessingInfo.workingViewId).isPreview && !runOnMain);
 
 	if(CurrentProcessingInfo.backgroundReplacement) {
-		writeMessageBlock("Running PixelMath to blend background");
+		ConsoleWriter.writeMessageBlock("Running PixelMath to blend background");
 		doPixelMath(View.viewById(CurrentProcessingInfo.backgroundMaskId), "$T*{0}".format(CurrentProcessingInfo.backgroundBlending));
 		doPixelMathMask(workingView, CurrentProcessingInfo.originalViewId,
 			CurrentProcessingInfo.backgroundMaskId, 1,
@@ -165,9 +167,9 @@ function execute(window, bringToFront = true, runOnMain = false) {
 		View.viewById(CurrentProcessingInfo.originalViewId).window.forceClose();
 	}
 
-	writeMessageEnd("Done.");
+	ConsoleWriter.writeMessageEnd("Done.");
 
-	stopProcessing();
+	JobStack.stopProcessing();
 	return workingView;
 }
 
@@ -187,7 +189,7 @@ function doPixelMathMask(view, expression, maskId, iterations, isPreview) {
 		let previewRect = View.viewById(CurrentProcessingInfo.mainViewId).window.previewRect(View.viewById(CurrentProcessingInfo.workingViewId));
 		let starMaskPart = null;
 		for (let i = 0; i < starMask.window.previews.length; i++) {
-			console.writeln("Checking preview " + i);
+			Console.writeln("Checking preview " + i);
 			let tempRect = starMask.window.previewRect(starMask.window.previews[i]);
 			if (tempRect.x0 == previewRect.x0 && tempRect.x1 == previewRect.x1 && tempRect.y0 == previewRect.y0 && tempRect.y1 == previewRect.y1) {
 				starMaskPart = starMask.window.previews[i];
@@ -346,8 +348,8 @@ function doDecon(view) {
 // #region "Create"
 
 function createRawStarMask(deconInfo) {
-	startProcessing();
-	writeMessageStart("Creating raw star mask based on " + deconInfo.mainViewId);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageStart("Creating raw star mask based on " + deconInfo.mainViewId);
 	// clone main image
 	let mainImageView = View.viewById(deconInfo.mainViewId).window.mainView;
 
@@ -359,7 +361,7 @@ function createRawStarMask(deconInfo) {
 	// check downsampling
 	// downsample if necessary
 	if (deconInfo.downsampleStarnet) {
-		writeMessageBlock("Downsampling " + lightness.id);
+		ConsoleWriter.writeMessageBlock("Downsampling " + lightness.id);
 		var downSample = new IntegerResample;
 		downSample.zoomFactor = -2;
 		downSample.downsamplingMode = IntegerResample.prototype.Average;
@@ -372,10 +374,10 @@ function createRawStarMask(deconInfo) {
 		downSample.executeOn(lightness);
 	}
 	// run starnet
-	let starNet = getStarNet();
+	let starNet = getStarNet(deconInfo.useStarNet2);
 	starNet.mask = true;
 	starNet.stride = 0;
-	writeMessageBlock("Running StarNet++ on " + lightness.id + " - hold tight, this might take a while.");
+	ConsoleWriter.writeMessageBlock("Running StarNet++ on " + lightness.id + " - hold tight, this might take a while.");
 	starNet.executeOn(lightness);
 	let oldCloned = lightness;
 	lightness = ImageWindow.activeWindow.currentView;
@@ -383,7 +385,7 @@ function createRawStarMask(deconInfo) {
 	oldCloned.window.forceClose();
 	// upscale if necessary
 	if (deconInfo.downsampleStarnet) {
-		writeMessageBlock("Upscaling " + lightness.id);
+		ConsoleWriter.writeMessageBlock("Upscaling " + lightness.id);
 		var upSample = new Resample;
 		upSample.xSize = mainImageView.image.width / lightness.image.width;
 		upSample.ySize = mainImageView.image.height / lightness.image.height;
@@ -406,13 +408,13 @@ function createRawStarMask(deconInfo) {
 	let newClonedView = cloneView(lightness, "_ez_Decon_" + View.viewById(deconInfo.mainViewId).window.mainView.id + "_StarMask");
 	lightness.window.forceClose();
 	deconInfo.starMaskId = newClonedView.id;
-	writeMessageEnd("Raw Mask Creation done", false, true);
-	stopProcessing();
+	ConsoleWriter.writeMessageEnd("Raw Mask Creation done", false, true);
+	JobStack.stopProcessing();
 }
 
 function createPSF(deconInfo) {
-	startProcessing();
-	writeMessageStart("Generating PSF image");
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageStart("Generating PSF image");
 	let usedStars = [];
 	var sensitivity = CurrentProcessingInfo.starSensitivity;
 	var Max = 0.8;
@@ -438,13 +440,13 @@ function createPSF(deconInfo) {
 		var functionIndex = functions[i];
 		var functionName = "";
 
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat) functionName = "Moffat";
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat10) functionName = "Moffat10";
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat8) functionName = "Moffat8";
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat6) functionName = "Moffat6";
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat4) functionName = "Moffat4";
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat25) functionName = "Moffat25";
-		if (functionIndex == DynamicPSF.prototype.Function_Moffat15) functionName = "Moffat15";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat) functionName = "Moffat";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat10) functionName = "Moffat10";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat8) functionName = "Moffat8";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat6) functionName = "Moffat6";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat4) functionName = "Moffat4";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat25) functionName = "Moffat25";
+		if (functionIndex === DynamicPSF.prototype.Function_Moffat15) functionName = "Moffat15";
 
 		functionList.push({ functionName: functionName, count: 0 });
 	}
@@ -459,7 +461,7 @@ function createPSF(deconInfo) {
 	let mainImageView = View.viewById(deconInfo.mainViewId).window.mainView;
 	let originalIsColor = mainImageView.image.isColor;
 	if (originalIsColor) {
-		writeMessageBlock("Original image is color, extracting luminance", true, false);
+		ConsoleWriter.writeMessageBlock("Original image is color, extracting luminance", true, false);
 		var lumExtraction = new ChannelExtraction;
 		lumExtraction.colorSpace = ChannelExtraction.prototype.CIELab;
 		lumExtraction.channels = [
@@ -478,7 +480,7 @@ function createPSF(deconInfo) {
 
 	if (originalIsColor) mainImageView.window.forceClose();
 
-	writeMessageBlock("Computing PSF", true, false);
+	ConsoleWriter.writeMessageBlock("Computing PSF", true, false);
 	processEvents();
 	// get min max MAD
 	for (let i = 0;i<selectedStars.length;i++) {
@@ -532,16 +534,16 @@ function createPSF(deconInfo) {
 	}
 
 	if (CurrentProcessingInfo.psfViewId == null) {
-		writeWarningBlock("Could not compute PSF! Adjust sensitivity and try again.");
-	} 
-	writeMessageEnd("PSF Creation done");
+		ConsoleWriter.writeWarningBlock("Could not compute PSF! Adjust sensitivity and try again.");
+	}
+	ConsoleWriter.writeMessageEnd("PSF Creation done");
 
-	stopProcessing();
+	JobStack.stopProcessing();
 }
 
 function createProcessedStarMask(deconInfo) {
-	startProcessing();
-	writeMessageStart("Creating processed star mask based on " + deconInfo.mainViewId);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageStart("Creating processed star mask based on " + deconInfo.mainViewId);
 	createRawStarMask(deconInfo);
 	applyStf(deconInfo.starMaskId);
 	applyBinarize(deconInfo.starMaskId);
@@ -550,8 +552,8 @@ function createProcessedStarMask(deconInfo) {
 	}
 	applyConvolute(deconInfo.starMaskId);
 	applyDilate(deconInfo.starMaskId);
-	writeMessageEnd("Mask creation done", false, true);
-	stopProcessing();
+	ConsoleWriter.writeMessageEnd("Mask creation done", false, true);
+	JobStack.stopProcessing();
 }
 
 // #endregion "Create"
@@ -649,7 +651,7 @@ function moffat(x, y, B, A, cx, cy, beta, sigmax, sigmay) {
 }
 
 function getStars(view, sensitivity) {
-	writeMessageStart("Getting stars for " + view.id);
+	ConsoleWriter.writeMessageStart("Getting stars for " + view.id);
 	processEvents();
 	var std = new StarDetector();
 	std.sensitivity = Math.pow(10.0, sensitivity);
@@ -677,22 +679,20 @@ function getStars(view, sensitivity) {
 
 	stars = [];
 
-	for (var i = 0; i != barycenters.length; ++i) {
-		stars.push(new Array(
-			0, 0, DynamicPSF.prototype.Star_DetectedOk,
+	for (var i = 0; i !== barycenters.length; ++i) {
+		stars.push([0, 0, DynamicPSF.prototype.Star_DetectedOk,
 			barycenters[i].position.x - barycenters[i].radius,
 			barycenters[i].position.y - barycenters[i].radius,
 			barycenters[i].position.x + barycenters[i].radius,
 			barycenters[i].position.y + barycenters[i].radius,
 			barycenters[i].position.x,
-			barycenters[i].position.y
-		));
+			barycenters[i].position.y]);
 	}
-	writeMessageBlock("Detected stars " + barycenters.length);
+	ConsoleWriter.writeMessageBlock("Detected stars " + barycenters.length);
 
-	var starProfiles = new Array;
+	var starProfiles = [];
 	var increment = Math.floor(stars.length / 100);
-	if (increment == 0) increment = stars.length;
+	if (increment === 0) increment = stars.length;
 
 	//
 	// PSF analysis
@@ -700,7 +700,7 @@ function getStars(view, sensitivity) {
 
 	dynamicPSF.autoPSF = true;		// start with auto, select by function codes
 	dynamicPSF.gaussianPSF = false;
-	var views = new Array;
+	var views = [];
 	views.push(new Array(view.id));
 	dynamicPSF.views = views;
 	dynamicPSF.views[0] = view.id;
@@ -715,7 +715,7 @@ function getStars(view, sensitivity) {
 	for (var i = 0; i < dynamicPSF.psf.length; ++i) {
 		var psfRow = dynamicPSF.psf[i];
 		allStars.push(psfRow);
-		if (psfRow[3] == DynamicPSF.prototype.PSF_FittedOk) {
+		if (psfRow[3] === DynamicPSF.prototype.PSF_FittedOk) {
 			starProfiles.push(new starProfile(
 				psfRow[PSF_function],
 				psfRow[PSF_circular],
@@ -734,10 +734,10 @@ function getStars(view, sensitivity) {
 	}
 
 	var a = uniqueArray(starProfiles, starProfileCompareMAD);
-	if (a.length == 0) {
-		writeWarningBlock("Could not detect any stars. This works only on linear images!");
+	if (a.length === 0) {
+		ConsoleWriter.writeWarningBlock("Could not detect any stars. This works only on linear images!");
 	}
-	writeMessageEnd("Getting stars done");
+	ConsoleWriter.writeMessageEnd("Getting stars done");
 	return a;
 }
 
@@ -787,8 +787,8 @@ function average(a) {
 
 // #region "Apply"
 function applyStf(viewId) {
-	startProcessing();
-	writeMessageBlock("Applying STF to " + viewId, true, false);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageBlock("Applying STF to " + viewId, true, false);
 	let view = View.viewById(viewId);
 	// apply stf
 	doSTF(view);
@@ -796,46 +796,46 @@ function applyStf(viewId) {
 	doHistogramTransformation(view);
 	// reset stf
 	doResetSTF(view);
-	stopProcessing();
+	JobStack.stopProcessing();
 }
 
 function applyBinarize(viewId) {
-	startProcessing();
-	writeMessageBlock("Applying Binarize to " + viewId, true, false);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageBlock("Applying Binarize to " + viewId, true, false);
 	let view = View.viewById(viewId);
 	// apply binarize
 	// threshold 0.10
 	doBinarize(view);
-	stopProcessing();
+	JobStack.stopProcessing();
 }
 
 function applyDilate(viewId) {
-	startProcessing();
-	writeMessageBlock("Applying Dilate to " + viewId, true, false);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageBlock("Applying Dilate to " + viewId, true, false);
 	let view = View.viewById(viewId);
 	// apply morphtransform
 	// dilation, amount 1, 1 iteration, 5x5 circular
 	doDilate(view);
-	stopProcessing();
+	JobStack.stopProcessing();
 }
 
 function applyConvolute(viewId) {
-	startProcessing();
-	writeMessageBlock("Applying Convolve to " + viewId, true, false);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageBlock("Applying Convolve to " + viewId, true, false);
 	let view = View.viewById(viewId);
 	// apply convolution
 	// sigma 4.5, shape 2
 	doConvolve(view);
-	stopProcessing();
+	JobStack.stopProcessing();
 }
 
 function applyBoost(viewId) {
-	startProcessing();
-	writeMessageBlock("Applying boost to " + viewId, true, false);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageBlock("Applying boost to " + viewId, true, false);
 	let view = View.viewById(viewId);
 	// apply curvestransformation
 	doBoost(view);
-	stopProcessing();
+	JobStack.stopProcessing();
 }
 
 // #endregion "Apply"
@@ -843,11 +843,11 @@ function applyBoost(viewId) {
 // #region "Dialog"
 
 function customizeDialog() {
-	dialog.infoBox.text = "<b>EZ Decon:</b> A script to easily deconvolve and sharpen an image. It is based on sharpening the image using deconvolution without deringing and replacing the stars in the image. A good star mask is required and can be generated with this script. For star mask generation, StarNet++ needs to be installed.";
-	dialog.allowPreviews();
+	GlobalDialog.infoBox.text = "<b>EZ Decon:</b> A script to easily deconvolve and sharpen an image. It is based on sharpening the image using deconvolution without deringing and replacing the stars in the image. A good star mask is required and can be generated with this script. For star mask generation, StarNet++ needs to be installed.";
+	GlobalDialog.allowPreviews();
 
-	dialog.tutorialPrerequisites = ["Image is cropped properly", "Image is not stretched (image is linear)", "StarNet++ is installed or StarNet++ raw star mask is present"];
-	dialog.tutorialSteps = ["Select image or preview to apply to",
+	GlobalDialog.tutorialPrerequisites = ["Image is cropped properly", "Image is not stretched (image is linear)", "StarNet++ is installed or StarNet++ raw star mask is present"];
+	GlobalDialog.tutorialSteps = ["Select image or preview to apply to",
 		"Press 'Create New Processed Star Mask' or 'Create new raw Star Mask' or select a already processed or raw star mask",
 		"Adjust Star Mask if necessary with 'Edit Star Mask' buttons and the custom ellipses in the panel on the right",
 		"Verify Star Mask is covering all stars well with the 'Alternative Version of Image' view of the 'Star Mask' tab",
@@ -860,48 +860,48 @@ function customizeDialog() {
 		"If stars have ringing increase Star Mask radius to cover stars better",
 		"Once happy with the result either run EZ Decon or Apply Current of a specified run"];
 
-	dialog.starMaskControlIndex = 1;
-	dialog.psfControlIndex = 2;
+	GlobalDialog.starMaskControlIndex = 1;
+	GlobalDialog.psfControlIndex = 2;
 
-	dialog.onEvaluateButton.show();
+	GlobalDialog.onEvaluateButton.show();
 
-	dialog.onExit = function () { }
+	GlobalDialog.onExit = function () { }
 
-	dialog.onSelectedMainView = function (value, prevMainViewId) {
-		dialog.starMaskImageSelector.excludedView = value.window.mainView;
-		dialog.psfImageSelector.excludedView = value.window.mainView;
+	GlobalDialog.onSelectedMainView = function (value, prevMainViewId) {
+		GlobalDialog.starMaskImageSelector.excludedView = value.window.mainView;
+		GlobalDialog.psfImageSelector.excludedView = value.window.mainView;
 		if (prevMainViewId != CurrentProcessingInfo.mainViewId) {
-			if (dialog.psfImageSelector.currentView != null)
-				dialog.psfImageSelector.remove(dialog.psfImageSelector.currentView);
-			dialog.psfImageSelector.reload();
+			if (GlobalDialog.psfImageSelector.currentView != null)
+				GlobalDialog.psfImageSelector.remove(GlobalDialog.psfImageSelector.currentView);
+			GlobalDialog.psfImageSelector.reload();
 			CurrentProcessingInfo.psfViewId = null;
 
-			if (dialog.starMaskImageSelector.currentView != null)
-				dialog.starMaskImageSelector.remove(dialog.starMaskImageSelector.currentView);
-			dialog.starMaskImageSelector.reload();
+			if (GlobalDialog.starMaskImageSelector.currentView != null)
+				GlobalDialog.starMaskImageSelector.remove(GlobalDialog.starMaskImageSelector.currentView);
+			GlobalDialog.starMaskImageSelector.reload();
 			CurrentProcessingInfo.starMaskId = null;
 
-			for (let i = dialog.tabBox.numberOfPages - 1; i >= 0; i--) {
-				dialog.tabBox.pageControlByIndex(i).dispose();
-				dialog.tabBox.removePage(i);
+			for (let i = GlobalDialog.tabBox.numberOfPages - 1; i >= 0; i--) {
+				GlobalDialog.tabBox.pageControlByIndex(i).dispose();
+				GlobalDialog.tabBox.removePage(i);
 			}
 		} else {
 			try {
-				dialog.tabBox.pageControlByIndex(0).dispose();
-				dialog.tabBox.removePage(0);
+				GlobalDialog.tabBox.pageControlByIndex(0).dispose();
+				GlobalDialog.tabBox.removePage(0);
 			} catch (e) { }
 		}
-		dialog.addMainControl(true, CurrentProcessingInfo.workingViewId, null);
-		dialog.tabBox.currentPageIndex = 0;
-		if (prevMainViewId == null) dialog.width *= 3;
+		GlobalDialog.addMainControl(true, CurrentProcessingInfo.workingViewId, null);
+		GlobalDialog.tabBox.currentPageIndex = 0;
+		if (prevMainViewId == null) GlobalDialog.width *= 3;
 	}
 
-	dialog.onEmptyMainView = function () {
-		dialog.tabBox.hide();
-		dialog.adjustToContents();
+	GlobalDialog.onEmptyMainView = function () {
+		GlobalDialog.tabBox.hide();
+		GlobalDialog.adjustToContents();
 	}
 
-	dialog.canRun = function () {
+	GlobalDialog.canRun = function () {
 		return CurrentProcessingInfo.mainViewId != null
 			&& CurrentProcessingInfo.psfViewId != null
 			&& CurrentProcessingInfo.starMaskId != null
@@ -909,10 +909,10 @@ function customizeDialog() {
 				|| (CurrentProcessingInfo.backgroundReplacement == true && CurrentProcessingInfo.backgroundMaskId != null));
 	}
 
-	dialog.canEvaluate = function () { return dialog.canRun(); }
+	GlobalDialog.canEvaluate = function () { return GlobalDialog.canRun(); }
 
-	dialog.starMaskImageSelector = new ViewList(dialog);
-	with (dialog.starMaskImageSelector) {
+	GlobalDialog.starMaskImageSelector = new ViewList(GlobalDialog);
+	with (GlobalDialog.starMaskImageSelector) {
 		bindings = function() {
 			if(CurrentProcessingInfo.starMaskId != null
 				&& CurrentProcessingInfo.starMaskId != this.currentView.id) {
@@ -925,26 +925,26 @@ function customizeDialog() {
 		onViewSelected = function (value) {
 			if (value.isNull) {
 				CurrentProcessingInfo.starMaskId = null;
-				let oldStarMask = dialog.findControlInTabBox("Star Mask");
+				let oldStarMask = GlobalDialog.findControlInTabBox("Star Mask");
 				if (oldStarMask != null) {
 					oldStarMask.dispose();
-					dialog.tabBox.removePage(dialog.findControlIndexInTabBox(oldStarMask));
+					GlobalDialog.tabBox.removePage(GlobalDialog.findControlIndexInTabBox(oldStarMask));
 				}
 				return;
 			}
 			if (value.image.isColor) {
-				dialog.showWarningDialog("Cannot use RGB Star Mask.");
-				dialog.starMaskImageSelector.remove(value);
+				GlobalDialog.showWarningDialog("Cannot use RGB Star Mask.");
+				GlobalDialog.starMaskImageSelector.remove(value);
 			} else {
 				let mainView = View.viewById(CurrentProcessingInfo.mainViewId);
 				if (value.image.width != mainView.image.width || value.image.height != mainView.image.height) {
-					dialog.showWarningDialog("Incompatible mask geometry");
-					dialog.starMaskImageSelector.remove(value);
+					GlobalDialog.showWarningDialog("Incompatible mask geometry");
+					GlobalDialog.starMaskImageSelector.remove(value);
 					return;
 				} else {
 					CurrentProcessingInfo.starMaskId = value.isPreview ? value.fullId : value.id;
-					writeMessageBlock("Selected star mask '" + CurrentProcessingInfo.starMaskId + "'", true, true);
-					dialog.addStarMaskControl();
+					ConsoleWriter.writeMessageBlock("Selected star mask '" + CurrentProcessingInfo.starMaskId + "'", true, true);
+					GlobalDialog.addStarMaskControl();
 				}
 			}
 		}
@@ -952,8 +952,8 @@ function customizeDialog() {
 		getMainViews();
 	}
 
-	dialog.backgroundProtectionSelector = new ViewList(dialog);
-	with (dialog.backgroundProtectionSelector) {
+	GlobalDialog.backgroundProtectionSelector = new ViewList(GlobalDialog);
+	with (GlobalDialog.backgroundProtectionSelector) {
 		toolTip = "Select Background Replacement";
 		bindings = function() {
 			if(CurrentProcessingInfo.backgroundMaskId != null
@@ -966,26 +966,26 @@ function customizeDialog() {
 		onViewSelected = function (value) {
 			if (value.isNull) {
 				CurrentProcessingInfo.backgroundMaskId = null;
-				let backgroundMask = dialog.findControlInTabBox("Background");
+				let backgroundMask = GlobalDialog.findControlInTabBox("Background");
 				if (backgroundMask != null) {
 					backgroundMask.dispose();
-					dialog.tabBox.removePage(dialog.findControlIndexInTabBox(backgroundMask));
+					GlobalDialog.tabBox.removePage(GlobalDialog.findControlIndexInTabBox(backgroundMask));
 				}
 				return;
 			}
 			if (value.image.isColor) {
-				dialog.showWarningDialog("Cannot use RGB Background Mask.");
-				dialog.backgroundProtectionSelector.remove(value);
+				GlobalDialog.showWarningDialog("Cannot use RGB Background Mask.");
+				GlobalDialog.backgroundProtectionSelector.remove(value);
 			} else {
 				let mainView = View.viewById(CurrentProcessingInfo.mainViewId);
 				if (value.image.width != mainView.image.width || value.image.height != mainView.image.height) {
-					dialog.showWarningDialog("Incompatible mask geometry");
-					dialog.backgroundProtectionSelector.remove(value);
+					GlobalDialog.showWarningDialog("Incompatible mask geometry");
+					GlobalDialog.backgroundProtectionSelector.remove(value);
 					return;
 				} else {
 					CurrentProcessingInfo.backgroundMaskId = value.isPreview ? value.fullId : value.id;
-					writeMessageBlock("Selected background mask '" + CurrentProcessingInfo.backgroundMaskId + "'", true, true);
-					dialog.addBackgroundMaskControl();
+					ConsoleWriter.writeMessageBlock("Selected background mask '" + CurrentProcessingInfo.backgroundMaskId + "'", true, true);
+					GlobalDialog.addBackgroundMaskControl();
 				}
 			}
 		}
@@ -993,12 +993,12 @@ function customizeDialog() {
 		getMainViews();
 	}
 
-	dialog.addMainControl = function (clear, viewId) {
+	GlobalDialog.addMainControl = function (clear, viewId) {
 		if (viewId != null) {
-			let previewControl = new PreviewControl(dialog, true, true);
+			let previewControl = new PreviewControl(GlobalDialog, true, true);
 
 			previewControl.swap = function () {
-				dialog.tabBox.currentPageIndex = dialog.tabBox.numberOfPages - 1;
+				GlobalDialog.tabBox.currentPageIndex = GlobalDialog.tabBox.numberOfPages - 1;
 			}
 
 			previewControl.SetView(View.viewById(viewId));
@@ -1009,32 +1009,32 @@ function customizeDialog() {
 				previewControl.swap.call(previewControl);
 			}
 			swapToLatestButton.bindings = function () {
-				swapToLatestButton.text = "Change Tab to " + dialog.tabBox.pageLabel(dialog.tabBox.numberOfPages - 1);
+				swapToLatestButton.text = "Change Tab to " + GlobalDialog.tabBox.pageLabel(GlobalDialog.tabBox.numberOfPages - 1);
 			}
 			previewControl.infoFrame.sizer.insertItem(0, swapToLatestButton);
 
-			dialog.tabBox.insertPage(0, previewControl, CurrentProcessingInfo.workingViewId);
+			GlobalDialog.tabBox.insertPage(0, previewControl, CurrentProcessingInfo.workingViewId);
 
-			dialog.tabBox.show();
+			GlobalDialog.tabBox.show();
 		} else {
-			dialog.tabBox.hide();
+			GlobalDialog.tabBox.hide();
 		}
 	}
 
-	dialog.addBackgroundMaskControl = function () {
-		startProcessing();
-		let backgroundMaskControl = dialog.findControlInTabBox("Background");
+	GlobalDialog.addBackgroundMaskControl = function () {
+		JobStack.startProcessing();
+		let backgroundMaskControl = GlobalDialog.findControlInTabBox("Background");
 		if (backgroundMaskControl != null) {
 			backgroundMaskControl.dispose();
-			dialog.tabBox.removePage(dialog.findControlIndexInTabBox(backgroundMaskControl));
+			GlobalDialog.tabBox.removePage(GlobalDialog.findControlIndexInTabBox(backgroundMaskControl));
 		}
 
-		let previewControl = new PreviewControl(dialog, false, false);
+		let previewControl = new PreviewControl(GlobalDialog, false, false);
 		previewControl.syncView = false;
 		previewControl.cloned = false;
 
 		previewControl.bindings = function () {
-			if (!isProcessing()) {
+			if (!JobStack.isProcessing()) {
 				let curIndex = this.previewFrameWindow.mainView.historyIndex;
 				if (curIndex != this.previousHistory) {
 					this.previousHistory = curIndex;
@@ -1044,8 +1044,8 @@ function customizeDialog() {
 		}
 
 		previewControl.computeAltImage = function () {
-			startProcessing();
-			let orgControl = dialog.tabBox.pageControlByIndex(0);
+			JobStack.startProcessing();
+			let orgControl = GlobalDialog.tabBox.pageControlByIndex(0);
 
 			if (this.previewFrameAltWindow == null) {
 				this.previewFrameAltWindow = cloneView(orgControl.previewFrameWindow.mainView, "_ez_temp_" + this.previewFrameWindow.currentView.id + "Alt", true, true).window;
@@ -1084,8 +1084,8 @@ function customizeDialog() {
 
 			clonedView.window.forceClose();
 
-			console.writeln("Ran PixelMath on " + this.previewFrameWindow.currentView.id);
-			stopProcessing();
+			Console.writeln("Ran PixelMath on " + this.previewFrameWindow.currentView.id);
+			JobStack.stopProcessing();
 		};
 
 		previewControl.previousHistory = View.viewById(CurrentProcessingInfo.backgroundMaskId).historyIndex;
@@ -1099,25 +1099,25 @@ function customizeDialog() {
 		}
 		previewControl.infoFrame.sizer.insertItem(0, infoPanel);
 
-		dialog.tabBox.insertPage(2, previewControl, "Background");
-		dialog.tabBox.currentPageIndex = dialog.findControlIndexInTabBox(dialog.findControlInTabBox("Background"));
-		stopProcessing();
+		GlobalDialog.tabBox.insertPage(2, previewControl, "Background");
+		GlobalDialog.tabBox.currentPageIndex = GlobalDialog.findControlIndexInTabBox(GlobalDialog.findControlInTabBox("Background"));
+		JobStack.stopProcessing();
 	}
 
-	dialog.addStarMaskControl = function () {
-		startProcessing();
-		let oldStarMaskControl = dialog.findControlInTabBox("Star Mask");
+	GlobalDialog.addStarMaskControl = function () {
+		JobStack.startProcessing();
+		let oldStarMaskControl = GlobalDialog.findControlInTabBox("Star Mask");
 		if (oldStarMaskControl != null) {
 			oldStarMaskControl.dispose();
-			dialog.tabBox.removePage(dialog.findControlIndexInTabBox(oldStarMaskControl));
+			GlobalDialog.tabBox.removePage(GlobalDialog.findControlIndexInTabBox(oldStarMaskControl));
 		}
 
-		let previewControl = new PreviewControl(dialog, false, false);
+		let previewControl = new PreviewControl(GlobalDialog, false, false);
 		previewControl.syncView = false;
 		previewControl.cloned = false;
 
 		previewControl.bindings = function () {
-			if (!isProcessing()) {
+			if (!JobStack.isProcessing()) {
 				let curIndex = this.previewFrameWindow.mainView.historyIndex;
 				if (curIndex != this.previousHistory) {
 					this.previousHistory = curIndex;
@@ -1131,8 +1131,8 @@ function customizeDialog() {
 		previewControl.dragging = false;
 
 		previewControl.computeAltImage = function () {
-			startProcessing();
-			let orgControl = dialog.tabBox.pageControlByIndex(0);
+			JobStack.startProcessing();
+			let orgControl = GlobalDialog.tabBox.pageControlByIndex(0);
 
 			if (this.previewFrameAltWindow == null) {
 				this.previewFrameAltWindow = cloneView(orgControl.previewFrameWindow.mainView, "_ez_temp_" + this.previewFrameWindow.currentView.id + "Alt", true).window;
@@ -1171,8 +1171,8 @@ function customizeDialog() {
 
 			clonedView.window.forceClose();
 
-			console.writeln("Ran PixelMath on " + this.previewFrameWindow.currentView.id);
-			stopProcessing();
+			Console.writeln("Ran PixelMath on " + this.previewFrameWindow.currentView.id);
+			JobStack.stopProcessing();
 		};
 
 		
@@ -1262,7 +1262,7 @@ function customizeDialog() {
 		with (previewControl.editAddEllipse) {
 			toolTip = "Add ellipse";
 			text = "Add Ellipse";
-			icon = dialog.scaledResource(":/icons/add.png");
+			icon = GlobalDialog.scaledResource(":/icons/add.png");
 			onClick = function () {
 				let control = previewControl;
 				let p = control.center();
@@ -1277,7 +1277,7 @@ function customizeDialog() {
 		with (previewControl.editDeleteEllipse) {
 			toolTip = "Remove selected ellipse";
 			text = "Remove Selected Ellipse";
-			icon = dialog.scaledResource(":/icons/delete.png");
+			icon = GlobalDialog.scaledResource(":/icons/delete.png");
 			bindings = function () {
 				this.enabled = previewControl.getEllipsoid() != null;
 			}
@@ -1296,7 +1296,7 @@ function customizeDialog() {
 		with (previewControl.restorePreviousEllipses) {
 			toolTip = "Restore last used ellipses";
 			text = "Restore last used Ellipses";
-			icon = dialog.scaledResource(":/icons/undo.png");
+			icon = GlobalDialog.scaledResource(":/icons/undo.png");
 			bindings = function () {
 				this.enabled = previewControl.previousEllipsoids.length > 0;
 			}
@@ -1323,7 +1323,7 @@ function customizeDialog() {
 		previewControl.starMaskAdd = new PushButton(previewControl);
 		with (previewControl.starMaskAdd) {
 			text = "Add all to mask";
-			icon = dialog.scaledResource(":/icons/add.png");
+			icon = GlobalDialog.scaledResource(":/icons/add.png");
 			bindings = function () {
 				this.enabled = previewControl.ellipsoids.length > 0;
 			}
@@ -1342,7 +1342,7 @@ function customizeDialog() {
 		previewControl.starMaskRemove = new PushButton(previewControl);
 		with (previewControl.starMaskRemove) {
 			text = "Subtract all from mask";
-			icon = dialog.scaledResource(":/icons/delete.png");
+			icon = GlobalDialog.scaledResource(":/icons/delete.png");
 			bindings = function () {
 				this.enabled = previewControl.ellipsoids.length > 0;
 			}
@@ -1380,22 +1380,22 @@ function customizeDialog() {
 		previewControl.infoFrame.sizer.insertItem(2, previewControl.ellipseGroupBox);
 		previewControl.infoFrame.sizer.insertItem(3, previewControl.starmaskEditGroupBox);
 
-		dialog.tabBox.insertPage(1, previewControl, "Star Mask");
-		dialog.tabBox.currentPageIndex = 1;
-		stopProcessing();
+		GlobalDialog.tabBox.insertPage(1, previewControl, "Star Mask");
+		GlobalDialog.tabBox.currentPageIndex = 1;
+		JobStack.stopProcessing();
 	}
 
-	dialog.addPSFControl = function () {
-		startProcessing();
+	GlobalDialog.addPSFControl = function () {
+		JobStack.startProcessing();
 		// add previewcontrol
-		let oldPSFControl = dialog.findControlInTabBox("PSF");
+		let oldPSFControl = GlobalDialog.findControlInTabBox("PSF");
 		if (oldPSFControl != null) {
 			oldPSFControl.dispose();
-			dialog.tabBox.removePage(dialog.findControlIndexInTabBox(oldPSFControl));
+			GlobalDialog.tabBox.removePage(GlobalDialog.findControlIndexInTabBox(oldPSFControl));
 
 		}
 
-		let previewControl = new PreviewControl(dialog, false, false);
+		let previewControl = new PreviewControl(GlobalDialog, false, false);
 
 		previewControl.SetView(View.viewById(CurrentProcessingInfo.psfViewId), false);
 		previewControl.UpdateZoom(8);
@@ -1408,177 +1408,188 @@ function customizeDialog() {
 		previewControl.infoFrame.sizer.insertItem(0, infoPanel);
 		previewControl.cloned = false;
 
-		dialog.tabBox.insertPage(3, previewControl, "PSF");
-		dialog.tabBox.currentPageIndex = dialog.findControlIndexInTabBox(dialog.findControlInTabBox("PSF"));
-		stopProcessing();
+		GlobalDialog.tabBox.insertPage(3, previewControl, "PSF");
+		GlobalDialog.tabBox.currentPageIndex = GlobalDialog.findControlIndexInTabBox(GlobalDialog.findControlInTabBox("PSF"));
+		JobStack.stopProcessing();
 	}
 
-	dialog.starMaskImageLabel = new Label(dialog);
-	with (dialog.starMaskImageLabel) {
+	GlobalDialog.starMaskImageLabel = new Label(GlobalDialog);
+	with (GlobalDialog.starMaskImageLabel) {
 		text = "Star Mask";
 	}
 
-	dialog.starMaskImageSizer = new SpacedHorizontalSizer();
-	with (dialog.starMaskImageSizer) {
-		addItem(dialog.starMaskImageLabel);
-		addItem(dialog.starMaskImageSelector);
+	GlobalDialog.starMaskImageSizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.starMaskImageSizer) {
+		addItem(GlobalDialog.starMaskImageLabel);
+		addItem(GlobalDialog.starMaskImageSelector);
 	}
 
-	dialog.createRawStarMaskButton = new PushButton(dialog);
-	with (dialog.createRawStarMaskButton) {
+	GlobalDialog.createRawStarMaskButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.createRawStarMaskButton) {
 		toolTip = "Create a raw star mask with StarNet++";
 		text = "Create New Raw Star Mask";
-		icon = dialog.scaledResource(":/browser/launch.png");
+		icon = GlobalDialog.scaledResource(":/browser/launch.png");
 		bindings = function () {
-			this.enabled = getStarNet() != null && CurrentProcessingInfo.starMaskId == null;
+			this.enabled = getStarNet(CurrentProcessingInfo.useStarNet2) != null && CurrentProcessingInfo.starMaskId == null;
 		}
 		onClick = function () {
 			createRawStarMask(CurrentProcessingInfo);
 		}
 	}
 
-	dialog.createProcessedStarMaskButton = new PushButton(dialog);
-	with (dialog.createProcessedStarMaskButton) {
+	GlobalDialog.createProcessedStarMaskButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.createProcessedStarMaskButton) {
 		toolTip = "Creates raw star mask and processes it with default values (stf, binarize, dilate, convolve, dilate)";
 		text = "Create New Processed Star Mask";
-		icon = dialog.scaledResource(":/icons/forward.png");
+		icon = GlobalDialog.scaledResource(":/icons/forward.png");
 		bindings = function () {
-			this.enabled = getStarNet() != null && CurrentProcessingInfo.starMaskId == null;
+			this.enabled = getStarNet(CurrentProcessingInfo.useStarNet2) != null && CurrentProcessingInfo.starMaskId == null;
 		}
 		onClick = function () {
 			createProcessedStarMask(CurrentProcessingInfo);
 		}
 	}
 
-	dialog.downsampleStarNetCheckBox = new CheckBox(dialog);
-	with (dialog.downsampleStarNetCheckBox) {
+	GlobalDialog.downsampleStarNetCheckBox = new CheckBox(GlobalDialog);
+	with (GlobalDialog.downsampleStarNetCheckBox) {
 		toolTip = ""
 		text = "Use Downsampling for StarNet++";
-		enabled = getStarNet() != null;
+		enabled = getStarNet(CurrentProcessingInfo.useStarNet2) != null;
 		checked = CurrentProcessingInfo.downsampleStarnet;
 		onCheck = function (value) {
 			CurrentProcessingInfo.downsampleStarnet = value;
 		}
 	}
 
+	GlobalDialog.useStarNet2 = new CheckBox(GlobalDialog);
+	with (GlobalDialog.useStarNet2) {
+		toolTip = ""
+		text = "Use StarNet2";
+		enabled = getStarNet(true) != null;
+		checked = CurrentProcessingInfo.useStarNet2;
+		onCheck = function (value) {
+			CurrentProcessingInfo.useStarNet2 = value;
+		}
+	}
+
 	// #region "EditButtons"
 
-	dialog.editUndoButton = new PushButton(dialog);
-	with (dialog.editUndoButton) {
+	GlobalDialog.editUndoButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.editUndoButton) {
 		toolTip = "Undo last action";
 		text = "Undo";
 		bindings = function () {
 			if (CurrentProcessingInfo.starMaskId == null) return;
 			this.enabled = View.viewById(CurrentProcessingInfo.starMaskId).historyIndex > 0;
 		}
-		icon = dialog.scaledResource(":/icons/undo.png");
+		icon = GlobalDialog.scaledResource(":/icons/undo.png");
 		onClick = function () {
-			startProcessing();
-			writeMessageBlock("Reverting last step", true, true);
+			JobStack.startProcessing();
+			ConsoleWriter.writeMessageBlock("Reverting last step", true, true);
 			View.viewById(CurrentProcessingInfo.starMaskId).window.undo();
-			stopProcessing();
+			JobStack.stopProcessing();
 		}
 	}
 
-	dialog.editApplyStfStretchButton = new PushButton(dialog);
-	with (dialog.editApplyStfStretchButton) {
+	GlobalDialog.editApplyStfStretchButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.editApplyStfStretchButton) {
 		toolTip = "Apply STF Stretch to Star Mask";
 		text = "STF Stretch";
-		icon = dialog.scaledResource(":/icons/burn.png");
+		icon = GlobalDialog.scaledResource(":/icons/burn.png");
 		onClick = function () {
 			applyStf(CurrentProcessingInfo.starMaskId);
 		}
 	}
 
-	dialog.editApplyBinarizeButton = new PushButton(dialog);
-	with (dialog.editApplyBinarizeButton) {
+	GlobalDialog.editApplyBinarizeButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.editApplyBinarizeButton) {
 		toolTip = "Binarizes the Star Mask";
 		text = "Binarize";
-		icon = dialog.scaledResource(":/icons/picture-contrast.png");
+		icon = GlobalDialog.scaledResource(":/icons/picture-contrast.png");
 		onClick = function () {
 			applyBinarize(CurrentProcessingInfo.starMaskId);
 		}
 	}
 
-	dialog.editApplyDilateButton = new PushButton(dialog);
-	with (dialog.editApplyDilateButton) {
+	GlobalDialog.editApplyDilateButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.editApplyDilateButton) {
 		toolTip = "Extends the stars in the Star Mask";
 		text = "Dilate";
-		icon = dialog.scaledResource(":/toolbar/image-mode-zoom-in.png");
+		icon = GlobalDialog.scaledResource(":/toolbar/image-mode-zoom-in.png");
 		onClick = function () {
 			applyDilate(CurrentProcessingInfo.starMaskId);
 		}
 	}
 
-	dialog.editApplyConvoluteButton = new PushButton(dialog);
-	with (dialog.editApplyConvoluteButton) {
+	GlobalDialog.editApplyConvoluteButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.editApplyConvoluteButton) {
 		toolTip = "Softens the Star Mask";
 		text = "Convolve";
-		icon = dialog.scaledResource(":/shapes/shape-sphere-gray.png");
+		icon = GlobalDialog.scaledResource(":/shapes/shape-sphere-gray.png");
 		onClick = function () {
 			applyConvolute(CurrentProcessingInfo.starMaskId);
 		}
 	}
 
-	dialog.editApplyBoostButton = new PushButton(dialog);
-	with (dialog.editApplyBoostButton) {
+	GlobalDialog.editApplyBoostButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.editApplyBoostButton) {
 		toolTip = "Boosts the Star Masks histogram slightly";
 		text = "Boost";
-		icon = dialog.scaledResource(":/icons/statistics.png");
+		icon = GlobalDialog.scaledResource(":/icons/statistics.png");
 		onClick = function () {
 			applyBoost(CurrentProcessingInfo.starMaskId);
 		}
 	}
 
-	dialog.spacerLabel = new Label(dialog);
+	GlobalDialog.spacerLabel = new Label(GlobalDialog);
 
-	dialog.editHorizSizer1 = new SpacedHorizontalSizer();
-	with (dialog.editHorizSizer1) {
-		addItem(dialog.editApplyStfStretchButton);
-		addItem(dialog.editApplyBoostButton);
+	GlobalDialog.editHorizSizer1 = new SpacedHorizontalSizer();
+	with (GlobalDialog.editHorizSizer1) {
+		addItem(GlobalDialog.editApplyStfStretchButton);
+		addItem(GlobalDialog.editApplyBoostButton);
 	}
 
-	dialog.editHorizSizer2 = new SpacedHorizontalSizer();
-	with (dialog.editHorizSizer2) {
-		addItem(dialog.editApplyDilateButton);
-		addItem(dialog.editApplyConvoluteButton);
+	GlobalDialog.editHorizSizer2 = new SpacedHorizontalSizer();
+	with (GlobalDialog.editHorizSizer2) {
+		addItem(GlobalDialog.editApplyDilateButton);
+		addItem(GlobalDialog.editApplyConvoluteButton);
 	}
 
-	dialog.editHorizSizer3 = new SpacedHorizontalSizer();
-	with (dialog.editHorizSizer3) {
-		addItem(dialog.editApplyBinarizeButton);
+	GlobalDialog.editHorizSizer3 = new SpacedHorizontalSizer();
+	with (GlobalDialog.editHorizSizer3) {
+		addItem(GlobalDialog.editApplyBinarizeButton);
 	}
 
-	dialog.editStarMaskGroupBox = new GroupBox(dialog);
-	with (dialog.editStarMaskGroupBox) {
+	GlobalDialog.editStarMaskGroupBox = new GroupBox(GlobalDialog);
+	with (GlobalDialog.editStarMaskGroupBox) {
 		title = "Edit Star Mask";
 		sizer = new SpacedVerticalSizer;
 		bindings = function () {
 			this.enabled = CurrentProcessingInfo.starMaskId != null;
 		}
-		sizer.addItem(dialog.editUndoButton);
-		sizer.addItem(dialog.spacerLabel);
-		sizer.addItem(dialog.editHorizSizer1);
-		sizer.addItem(dialog.editHorizSizer2);
-		sizer.addItem(dialog.editHorizSizer3);
+		sizer.addItem(GlobalDialog.editUndoButton);
+		sizer.addItem(GlobalDialog.spacerLabel);
+		sizer.addItem(GlobalDialog.editHorizSizer1);
+		sizer.addItem(GlobalDialog.editHorizSizer2);
+		sizer.addItem(GlobalDialog.editHorizSizer3);
 	}
 
 	// #endregion "EditButtons"
 
 
-	dialog.backgroundImageLabel = new Label(dialog);
-	with (dialog.backgroundImageLabel) {
+	GlobalDialog.backgroundImageLabel = new Label(GlobalDialog);
+	with (GlobalDialog.backgroundImageLabel) {
 		text = "Background Mask";
 	}
 
-	dialog.backgroundImageSizer = new SpacedHorizontalSizer();
-	with (dialog.backgroundImageSizer) {
-		addItem(dialog.backgroundImageLabel);
-		addItem(dialog.backgroundProtectionSelector);
+	GlobalDialog.backgroundImageSizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.backgroundImageSizer) {
+		addItem(GlobalDialog.backgroundImageLabel);
+		addItem(GlobalDialog.backgroundProtectionSelector);
 	}
 
-	dialog.backgroundBlendingSlider = new NumericControl(dialog);
-	with(dialog.backgroundBlendingSlider) {
+	GlobalDialog.backgroundBlendingSlider = new NumericControl(GlobalDialog);
+	with(GlobalDialog.backgroundBlendingSlider) {
 		setRange(0.1, 1);
 		slider.setRange(1,100);
 		setPrecision(2);
@@ -1591,10 +1602,10 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.backgroundMaskCreateButton = new PushButton(dialog);
-	with(dialog.backgroundMaskCreateButton) {
+	GlobalDialog.backgroundMaskCreateButton = new PushButton(GlobalDialog);
+	with(GlobalDialog.backgroundMaskCreateButton) {
 		text = "Create Background Mask";
-		icon = dialog.scaledResource(":/browser/launch.png");
+		icon = GlobalDialog.scaledResource(":/browser/launch.png");
 		toolTip = "Creates a Background Mask using the Median of the image";
 		bindings = function() {
 			this.enabled = CurrentProcessingInfo.backgroundMaskId == null && CurrentProcessingInfo.backgroundReplacement;
@@ -1604,8 +1615,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.backgroundGroupBox = new GroupBox(dialog);
-	with(dialog.backgroundGroupBox) {
+	GlobalDialog.backgroundGroupBox = new GroupBox(GlobalDialog);
+	with(GlobalDialog.backgroundGroupBox) {
 		titleCheckBox = true;
 		title = "Background Protection"
 		bindings = function() { 
@@ -1614,28 +1625,29 @@ function customizeDialog() {
 		onCheck = function(value) {
 			CurrentProcessingInfo.backgroundReplacement = value;
 		}
-		sizer = new SpacedVerticalSizer(dialog.backgroundGroupBox);
-		sizer.addItem(dialog.backgroundImageSizer);
-		sizer.addItem(dialog.backgroundMaskCreateButton);
-		sizer.addItem(dialog.backgroundBlendingSlider);
+		sizer = new SpacedVerticalSizer(GlobalDialog.backgroundGroupBox);
+		sizer.addItem(GlobalDialog.backgroundImageSizer);
+		sizer.addItem(GlobalDialog.backgroundMaskCreateButton);
+		sizer.addItem(GlobalDialog.backgroundBlendingSlider);
 	}
 
-	dialog.masksTabControl = new Control(dialog);
-	with (dialog.masksTabControl) {
-		sizer = new SpacedVerticalSizer(dialog.masksTabControl);
-		sizer.addItem(dialog.starMaskImageSizer);
-		sizer.addItem(dialog.createRawStarMaskButton);
-		sizer.addItem(dialog.createProcessedStarMaskButton);
-		sizer.addItem(dialog.downsampleStarNetCheckBox);
-		sizer.addItem(dialog.editStarMaskGroupBox);
-		sizer.addItem(dialog.backgroundGroupBox);
+	GlobalDialog.masksTabControl = new Control(GlobalDialog);
+	with (GlobalDialog.masksTabControl) {
+		sizer = new SpacedVerticalSizer(GlobalDialog.masksTabControl);
+		sizer.addItem(GlobalDialog.starMaskImageSizer);
+		sizer.addItem(GlobalDialog.createRawStarMaskButton);
+		sizer.addItem(GlobalDialog.createProcessedStarMaskButton);
+		sizer.addItem(GlobalDialog.downsampleStarNetCheckBox);
+		sizer.addItem(GlobalDialog.useStarNet2);
+		sizer.addItem(GlobalDialog.editStarMaskGroupBox);
+		sizer.addItem(GlobalDialog.backgroundGroupBox);
 		sizer.addStretch();
 	}
 
 	// #region "PSFImageControl"
 
-	dialog.psfImageSelector = new ViewList(dialog);
-	with (dialog.psfImageSelector) {
+	GlobalDialog.psfImageSelector = new ViewList(GlobalDialog);
+	with (GlobalDialog.psfImageSelector) {
 		toolTip = "Select PSF";
 		bindings = function() {
 			if(CurrentProcessingInfo.psfViewId != null
@@ -1648,30 +1660,30 @@ function customizeDialog() {
 		onViewSelected = function (value) {
 			if (value.isNull) {
 				CurrentProcessingInfo.psfViewId = null;
-				let oldStarMask = dialog.findControlInTabBox("PSF");
+				let oldStarMask = GlobalDialog.findControlInTabBox("PSF");
 				if (oldStarMask != null) {
 					oldStarMask.dispose();
-					dialog.tabBox.removePage(dialog.findControlIndexInTabBox(oldStarMask));
+					GlobalDialog.tabBox.removePage(GlobalDialog.findControlIndexInTabBox(oldStarMask));
 				}
 				return;
 			}
 			if (value.image.isColor) {
-				dialog.showWarningDialog("Cannot use RGB PSF.");
-				dialog.starMaskImageSelector.remove(value);
+				GlobalDialog.showWarningDialog("Cannot use RGB PSF.");
+				GlobalDialog.starMaskImageSelector.remove(value);
 			} else {
 				CurrentProcessingInfo.psfViewId = value.isPreview ? value.fullId : value.id;
-				writeMessageBlock("Selected PSF '" + CurrentProcessingInfo.psfViewId + "'", true, true);
-				dialog.addPSFControl();
-				dialog.tabBox.currentPageIndex = dialog.findControlIndexInTabBox(dialog.findControlInTabBox("PSF"));
+				ConsoleWriter.writeMessageBlock("Selected PSF '" + CurrentProcessingInfo.psfViewId + "'", true, true);
+				GlobalDialog.addPSFControl();
+				GlobalDialog.tabBox.currentPageIndex = GlobalDialog.findControlIndexInTabBox(GlobalDialog.findControlInTabBox("PSF"));
 			}
 		}
 		excludeIdentifiersPattern = "_ez_temp_*";
 		getMainViews();
 	}
 
-	dialog.onEvaluate = function () {
+	GlobalDialog.onEvaluate = function () {
 		// take original image
-		let orgControl = dialog.tabBox.pageControlByIndex(0);
+		let orgControl = GlobalDialog.tabBox.pageControlByIndex(0);
 		let orgWindow = orgControl.previewFrameWindow;
 
 		// clone it
@@ -1683,13 +1695,13 @@ function customizeDialog() {
 		clone = ranClone;
 
 		// assign it to control
-		let previewControl = new PreviewControl(dialog, true, true);
+		let previewControl = new PreviewControl(GlobalDialog, true, true);
 
 		previewControl.swap = function () {
-			dialog.tabBox.currentPageIndex = 0;
+			GlobalDialog.tabBox.currentPageIndex = 0;
 		}
 
-		previewControl.STF = dialog.tabBox.pageControlByIndex(0).STF;
+		previewControl.STF = GlobalDialog.tabBox.pageControlByIndex(0).STF;
 		previewControl.SetView(clone, true);
 		clone.window.forceClose();
 
@@ -1706,52 +1718,52 @@ function customizeDialog() {
 		closeButton.onClick = function () {
 			previewControl.dispose();
 			let index = 0;
-			for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-				if (dialog.tabBox.pageControlByIndex(i) === previewControl) {
+			for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+				if (GlobalDialog.tabBox.pageControlByIndex(i) === previewControl) {
 					index = i;
 					break;
 				}
 			}
-			dialog.tabBox.removePage(index);
+			GlobalDialog.tabBox.removePage(index);
 		}
 		previewControl.infoFrame.sizer.insertItem(1, closeButton);
 
-		dialog.tabBox.addPage(previewControl, "Decon Run " + (++CurrentProcessingInfo.currentDeconRun));
+		GlobalDialog.tabBox.addPage(previewControl, "Decon Run " + (++CurrentProcessingInfo.currentDeconRun));
 		previewControl.SetProcessingInfo(CurrentProcessingInfo, "Decon Run " + (CurrentProcessingInfo.currentDeconRun));
 
-		dialog.tabBox.currentPageIndex = dialog.tabBox.numberOfPages - 1;
+		GlobalDialog.tabBox.currentPageIndex = GlobalDialog.tabBox.numberOfPages - 1;
 	}
 
-	dialog.psfImageLabel = new Label(dialog);
-	with (dialog.psfImageLabel) {
+	GlobalDialog.psfImageLabel = new Label(GlobalDialog);
+	with (GlobalDialog.psfImageLabel) {
 		text = "PSF Image";
 	}
 
-	dialog.psfImageSizer = new SpacedHorizontalSizer();
-	with (dialog.psfImageSizer) {
-		addItem(dialog.psfImageLabel);
-		addItem(dialog.psfImageSelector);
+	GlobalDialog.psfImageSizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.psfImageSizer) {
+		addItem(GlobalDialog.psfImageLabel);
+		addItem(GlobalDialog.psfImageSelector);
 	}
 
-	dialog.generatePsfButton = new PushButton(dialog);
-	with (dialog.generatePsfButton) {
+	GlobalDialog.generatePsfButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.generatePsfButton) {
 		toolTip = "Generates a PSF for this image";
 		text = "Generate PSF";
-		icon = dialog.scaledResource(":/browser/launch.png");
+		icon = GlobalDialog.scaledResource(":/browser/launch.png");
 		bindings = function () {
 			this.enabled = CurrentProcessingInfo.psfViewId == null;
 		}
 		onClick = function () {
 			createPSF(CurrentProcessingInfo);
-			dialog.psfImageSelector.currentView = View.viewById(CurrentProcessingInfo.psfViewId);
+			GlobalDialog.psfImageSelector.currentView = View.viewById(CurrentProcessingInfo.psfViewId);
 			if (CurrentProcessingInfo.psfViewId != null) {
-				dialog.addPSFControl();
+				GlobalDialog.addPSFControl();
 			}
 		}
 	}
 
-	dialog.maxStarsForPsfNumericControl = new NumericControl(dialog);
-	with (dialog.maxStarsForPsfNumericControl) {
+	GlobalDialog.maxStarsForPsfNumericControl = new NumericControl(GlobalDialog);
+	with (GlobalDialog.maxStarsForPsfNumericControl) {
 		toolTip = "Maximum amount of stars for PSF generation";
 		label.text = "Max PSF Stars";
 		label.minWidth = 100;
@@ -1765,8 +1777,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.starSensitivityNumericControl = new NumericControl(dialog);
-	with (dialog.starSensitivityNumericControl) {
+	GlobalDialog.starSensitivityNumericControl = new NumericControl(GlobalDialog);
+	with (GlobalDialog.starSensitivityNumericControl) {
 		toolTip = "Maximum amount of stars for PSF generation";
 		label.text = "Sensitivity";
 		label.minWidth = 100;
@@ -1780,19 +1792,19 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.psfOptionsGroupBox = new GroupBox(dialog);
-	with (dialog.psfOptionsGroupBox) {
+	GlobalDialog.psfOptionsGroupBox = new GroupBox(GlobalDialog);
+	with (GlobalDialog.psfOptionsGroupBox) {
 		title = "PSF Generation Options";
 		sizer = new SpacedVerticalSizer;
-		sizer.addItem(dialog.maxStarsForPsfNumericControl);
-		sizer.addItem(dialog.starSensitivityNumericControl);
+		sizer.addItem(GlobalDialog.maxStarsForPsfNumericControl);
+		sizer.addItem(GlobalDialog.starSensitivityNumericControl);
 	}
 
 	// #endregion "PSFImageControl"
 
 	// #region "Wavelets"
-	dialog.waveletNoiseStrSlider_1 = new NumericControl(dialog);
-	with (dialog.waveletNoiseStrSlider_1) {
+	GlobalDialog.waveletNoiseStrSlider_1 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseStrSlider_1) {
 		label.minWidth = 10;
 		setRange(0.1, 1);
 		slider.setRange(0, 100);
@@ -1806,8 +1818,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseThrSlider_1 = new NumericControl(dialog);
-	with (dialog.waveletNoiseThrSlider_1) {
+	GlobalDialog.waveletNoiseThrSlider_1 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseThrSlider_1) {
 		label.text = "1:";
 		//label.text = "1";
 		label.minWidth = 10;
@@ -1823,8 +1835,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseStrSlider_2 = new NumericControl(dialog);
-	with (dialog.waveletNoiseStrSlider_2) {
+	GlobalDialog.waveletNoiseStrSlider_2 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseStrSlider_2) {
 		label.minWidth = 10;
 		setRange(0.1, 1);
 		slider.setRange(0, 100);
@@ -1838,8 +1850,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseThrSlider_2 = new NumericControl(dialog);
-	with (dialog.waveletNoiseThrSlider_2) {
+	GlobalDialog.waveletNoiseThrSlider_2 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseThrSlider_2) {
 		label.text = "2:";
 		//label.text = "2";
 		label.minWidth = 10;
@@ -1855,8 +1867,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseStrSlider_3 = new NumericControl(dialog);
-	with (dialog.waveletNoiseStrSlider_3) {
+	GlobalDialog.waveletNoiseStrSlider_3 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseStrSlider_3) {
 		label.minWidth = 10;
 		setRange(0.1, 1);
 		slider.setRange(0, 100);
@@ -1870,8 +1882,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseThrSlider_3 = new NumericControl(dialog);
-	with (dialog.waveletNoiseThrSlider_3) {
+	GlobalDialog.waveletNoiseThrSlider_3 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseThrSlider_3) {
 		label.text = "3:";
 		//label.text = "3";
 		label.minWidth = 10;
@@ -1887,8 +1899,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseStrSlider_4 = new NumericControl(dialog);
-	with (dialog.waveletNoiseStrSlider_4) {
+	GlobalDialog.waveletNoiseStrSlider_4 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseStrSlider_4) {
 		label.minWidth = 10;
 		setRange(0.1, 1);
 		slider.setRange(0, 100);
@@ -1902,8 +1914,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseThrSlider_4 = new NumericControl(dialog);
-	with (dialog.waveletNoiseThrSlider_4) {
+	GlobalDialog.waveletNoiseThrSlider_4 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseThrSlider_4) {
 		label.text = "4:";
 		//label.text = "4";
 		label.minWidth = 10;
@@ -1919,8 +1931,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseStrSlider_5 = new NumericControl(dialog);
-	with (dialog.waveletNoiseStrSlider_5) {
+	GlobalDialog.waveletNoiseStrSlider_5 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseStrSlider_5) {
 		label.minWidth = 10;
 		setRange(0.1, 1);
 		slider.setRange(0, 100);
@@ -1934,8 +1946,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletNoiseThrSlider_5 = new NumericControl(dialog);
-	with (dialog.waveletNoiseThrSlider_5) {
+	GlobalDialog.waveletNoiseThrSlider_5 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.waveletNoiseThrSlider_5) {
 		//label.text = "5";
 		label.text = "5:";
 		label.minWidth = 10;
@@ -1951,55 +1963,55 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.wavelet1Sizer = new SpacedHorizontalSizer();
-	with (dialog.wavelet1Sizer) {
-		addItem(dialog.waveletNoiseThrSlider_1);
-		addItem(dialog.waveletNoiseStrSlider_1);
+	GlobalDialog.wavelet1Sizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.wavelet1Sizer) {
+		addItem(GlobalDialog.waveletNoiseThrSlider_1);
+		addItem(GlobalDialog.waveletNoiseStrSlider_1);
 	}
 
-	dialog.wavelet2Sizer = new SpacedHorizontalSizer();
-	with (dialog.wavelet2Sizer) {
-		addItem(dialog.waveletNoiseThrSlider_2);
-		addItem(dialog.waveletNoiseStrSlider_2);
+	GlobalDialog.wavelet2Sizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.wavelet2Sizer) {
+		addItem(GlobalDialog.waveletNoiseThrSlider_2);
+		addItem(GlobalDialog.waveletNoiseStrSlider_2);
 	}
 
-	dialog.wavelet3Sizer = new SpacedHorizontalSizer();
-	with (dialog.wavelet3Sizer) {
-		addItem(dialog.waveletNoiseThrSlider_3);
-		addItem(dialog.waveletNoiseStrSlider_3);
+	GlobalDialog.wavelet3Sizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.wavelet3Sizer) {
+		addItem(GlobalDialog.waveletNoiseThrSlider_3);
+		addItem(GlobalDialog.waveletNoiseStrSlider_3);
 	}
 
-	dialog.wavelet4Sizer = new SpacedHorizontalSizer();
-	with (dialog.wavelet4Sizer) {
-		addItem(dialog.waveletNoiseThrSlider_4);
-		addItem(dialog.waveletNoiseStrSlider_4);
+	GlobalDialog.wavelet4Sizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.wavelet4Sizer) {
+		addItem(GlobalDialog.waveletNoiseThrSlider_4);
+		addItem(GlobalDialog.waveletNoiseStrSlider_4);
 	}
 
-	dialog.wavelet5Sizer = new SpacedHorizontalSizer();
-	with (dialog.wavelet5Sizer) {
-		addItem(dialog.waveletNoiseThrSlider_5);
-		addItem(dialog.waveletNoiseStrSlider_5);
+	GlobalDialog.wavelet5Sizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.wavelet5Sizer) {
+		addItem(GlobalDialog.waveletNoiseThrSlider_5);
+		addItem(GlobalDialog.waveletNoiseStrSlider_5);
 	}
 
-	dialog.waveletLabel = new Label();
-	with (dialog.waveletLabel) {
+	GlobalDialog.waveletLabel = new Label();
+	with (GlobalDialog.waveletLabel) {
 		text = "Noise Threshold";
 	}
 
-	dialog.waveletReductionLabel = new Label();
-	dialog.waveletReductionLabel.text = "Noise Reduction";
+	GlobalDialog.waveletReductionLabel = new Label();
+	GlobalDialog.waveletReductionLabel.text = "Noise Reduction";
 
-	dialog.waveletLabelSizer = new SpacedHorizontalSizer();
-	with (dialog.waveletLabelSizer) {
-		addItem(dialog.waveletLabel);
-		addItem(dialog.waveletReductionLabel);
+	GlobalDialog.waveletLabelSizer = new SpacedHorizontalSizer();
+	with (GlobalDialog.waveletLabelSizer) {
+		addItem(GlobalDialog.waveletLabel);
+		addItem(GlobalDialog.waveletReductionLabel);
 	}
 
-	dialog.resetButton = new PushButton(dialog);
-	with (dialog.resetButton) {
+	GlobalDialog.resetButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.resetButton) {
 		text = "Reset Wavelet Settings";
 		toolTip = "Reset Wavelets to default settings";
-		icon = dialog.scaledResource(":/icons/debug-restart.png");
+		icon = GlobalDialog.scaledResource(":/icons/debug-restart.png");
 		onClick = function () {
 			CurrentProcessingInfo.waveletThr[0] = 10;
 			CurrentProcessingInfo.waveletThr[1] = 8;
@@ -2014,23 +2026,23 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.waveletGroupBox = new GroupBox(dialog);
-	with (dialog.waveletGroupBox) {
+	GlobalDialog.waveletGroupBox = new GroupBox(GlobalDialog);
+	with (GlobalDialog.waveletGroupBox) {
 		title = "Wavelets";
 		sizer = new SpacedVerticalSizer();
-		sizer.addItem(dialog.waveletLabelSizer);
-		sizer.addItem(dialog.wavelet1Sizer);
-		sizer.addItem(dialog.wavelet2Sizer);
-		sizer.addItem(dialog.wavelet3Sizer);
-		sizer.addItem(dialog.wavelet4Sizer);
-		sizer.addItem(dialog.wavelet5Sizer);
-		sizer.addItem(dialog.resetButton);
+		sizer.addItem(GlobalDialog.waveletLabelSizer);
+		sizer.addItem(GlobalDialog.wavelet1Sizer);
+		sizer.addItem(GlobalDialog.wavelet2Sizer);
+		sizer.addItem(GlobalDialog.wavelet3Sizer);
+		sizer.addItem(GlobalDialog.wavelet4Sizer);
+		sizer.addItem(GlobalDialog.wavelet5Sizer);
+		sizer.addItem(GlobalDialog.resetButton);
 	}
 
 	// #endregion "Wavelets"
 
-	dialog.deconIterationsSlider = new NumericControl(dialog);
-	with (dialog.deconIterationsSlider) {
+	GlobalDialog.deconIterationsSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.deconIterationsSlider) {
 		label.text = "Decon iterations";
 		label.minWidth = 160;
 		setRange(1, 150);
@@ -2043,8 +2055,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.pixelMathIterationsSlider = new NumericControl(dialog);
-	with (dialog.pixelMathIterationsSlider) {
+	GlobalDialog.pixelMathIterationsSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.pixelMathIterationsSlider) {
 		label.text = "PixelMath iterations";
 		label.minWidth = 160;
 		setRange(1, 20);
@@ -2057,57 +2069,57 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.applyDeconGroupBox = new GroupBox(dialog);
-	with (dialog.applyDeconGroupBox) {
+	GlobalDialog.applyDeconGroupBox = new GroupBox(GlobalDialog);
+	with (GlobalDialog.applyDeconGroupBox) {
 		title = "Apply";
 		sizer = new SpacedVerticalSizer();
-		sizer.addItem(dialog.deconIterationsSlider);
-		sizer.addItem(dialog.pixelMathIterationsSlider);
+		sizer.addItem(GlobalDialog.deconIterationsSlider);
+		sizer.addItem(GlobalDialog.pixelMathIterationsSlider);
 	}
 
-	dialog.deconvolutionControl = new Control(dialog);
-	with (dialog.deconvolutionControl) {
+	GlobalDialog.deconvolutionControl = new Control(GlobalDialog);
+	with (GlobalDialog.deconvolutionControl) {
 		sizer = new SpacedVerticalSizer();
-		sizer.addItem(dialog.psfImageSizer);
-		sizer.addItem(dialog.generatePsfButton);
-		sizer.addItem(dialog.psfOptionsGroupBox);
-		sizer.addItem(dialog.waveletGroupBox);
-		sizer.addItem(dialog.applyDeconGroupBox);
+		sizer.addItem(GlobalDialog.psfImageSizer);
+		sizer.addItem(GlobalDialog.generatePsfButton);
+		sizer.addItem(GlobalDialog.psfOptionsGroupBox);
+		sizer.addItem(GlobalDialog.waveletGroupBox);
+		sizer.addItem(GlobalDialog.applyDeconGroupBox);
 		sizer.addStretch();
 	}
 
-	dialog.replacementTabBox = new TabBox(dialog);
-	with (dialog.replacementTabBox) {
-		addPage(dialog.masksTabControl, "Masking");
-		addPage(dialog.deconvolutionControl, "Deconvolution");
+	GlobalDialog.replacementTabBox = new TabBox(GlobalDialog);
+	with (GlobalDialog.replacementTabBox) {
+		addPage(GlobalDialog.masksTabControl, "Masking");
+		addPage(GlobalDialog.deconvolutionControl, "Deconvolution");
 		bindings = function () {
 			this.enabled = CurrentProcessingInfo.mainViewId != null;
 		}
 	}
 
-	//dialog.replaceMainControl(dialog.replacementTabBox);
+	// GlobalDialog.replaceMainControl(GlobalDialog.replacementTabBox);
 
-	dialog.controlSizer.insertItem(3, dialog.replacementTabBox);
+	GlobalDialog.controlSizer.insertItem(3, GlobalDialog.replacementTabBox);
 
-	dialog.controlSizer.removeItem(dialog.mainControl);
-	dialog.mainControl.hide();
+	GlobalDialog.controlSizer.removeItem(GlobalDialog.mainControl);
+	GlobalDialog.mainControl.hide();
 
 
-	dialog.createProcessesButton = new PushButton(dialog);
-	with (dialog.createProcessesButton) {
+	GlobalDialog.createProcessesButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.createProcessesButton) {
 		text = "Create Processes only";
 		toolTip = "Will create processes only";
-		icon = dialog.scaledResource(":/icons/ok.png");
+		icon = GlobalDialog.scaledResource(":/icons/ok.png");
 		bindings = function () {
-			this.enabled = dialog.canRun();
+			this.enabled = GlobalDialog.canRun();
 		}
 		onClick = function () {
 			CurrentProcessingInfo.createProcesesOnly = true;
-			dialog.ok();
+			GlobalDialog.ok();
 		}
 	}
 
-	dialog.runAndCloseGroupBox.sizer.insertItem(0, dialog.createProcessesButton);
+	GlobalDialog.runAndCloseGroupBox.sizer.insertItem(0, GlobalDialog.createProcessesButton);
 }
 
 // #endregion "Dialog"
@@ -2115,16 +2127,23 @@ function customizeDialog() {
 function DeconInfo() {
 	this.mainViewId = null;
 	this.workingViewId = null;
+	this.originalViewId = null;
 	this.starMaskId = null;
+	this.backgroundMaskId = null;
+	this.backgroundReplacement = null;
+	this.backgroundBlending = null
+	this.starSensitivity = null;
 	this.downsampleStarnet = null;
+	this.useStarNet2 = null;
 	this.psfViewId = null;
 	this.psfMaxStars = null;
 	this.waveletStr = null;
 	this.waveletThr = null;
 	this.deconIterations = null;
 	this.pixelMathIterations = null;
+	this.createProcesesOnly = null;
+	this.currentDeconRun = null;
 }
-
 DeconInfo.prototype = new ProcessingInfo;
 
 function ellipsoidsImage(view, ellipsoids) {

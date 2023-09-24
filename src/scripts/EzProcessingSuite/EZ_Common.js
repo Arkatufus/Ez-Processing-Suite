@@ -36,57 +36,204 @@
 #define StorePropertyAttribute (PropertyAttribute_Permanent | PropertyAttribute_Storable)
 
 // #region Globals
-var COMMONVERSION = "2.7";
-var CurrentProcessingInfo = null;
-var dialog = null;
-var commonMessageLevel = 0;
-var FULLNAME = NAME + " v" + VERSION;
-var WARNING = "WARNING: THE EZ PROCESSING SUITE IS STILL UNDER HEAVY DEVELOPMENT. PLEASE SAVE YOUR WORK BEFORE DOING ANYTHING IN THE \"" + FULLNAME.toUpperCase() + "\" SCRIPT INCLUDING SELECTING AN IMAGE. PIXINSIGHT COULD CRASH AND YOU COULD LOSE ALL YOUR UNSAVED WORK.";
-var showWarning = false;
-var PROCESSING = [];
+var CommonVersion = "2.7";
+var FullName = NAME + " v" + VERSION;
+var WarningMessage = "WARNING: THE EZ PROCESSING SUITE IS STILL UNDER HEAVY DEVELOPMENT. PLEASE SAVE YOUR WORK BEFORE DOING ANYTHING IN THE \"" + FullName.toUpperCase() + "\" SCRIPT INCLUDING SELECTING AN IMAGE. PIXINSIGHT COULD CRASH AND YOU COULD LOSE ALL YOUR UNSAVED WORK.";
+var ShowWarning = false;
 
-myDialog.prototype = new Dialog;
-ProcessingInfo.prototype = new Object;
-PreviewControl.prototype = new Control;
+var CurrentProcessingInfo = new ProcessingInfo();
+var GlobalDialog = null;
+var JobStack = new ProcessStack();
+var ConsoleWriter = new ConsoleBlock();
+
 SpacedVerticalSizer.prototype = new VerticalSizer;
 SpacedHorizontalSizer.prototype = new HorizontalSizer;
 SpacedRichLabel.prototype = new Label;
 
+// -------------------------------------
+// CLASS ProcessingInfo
+
 function ProcessingInfo() {
 	this.mainViewId = null;
 	this.workingViewId = null;
-}
 
-// #endregion Globals
+	this.toString = function()
+	{
+		let result = "";
+		for (let propName in this) {
+			result += this.constructor.name + "." +propName + " = " + this[propName];
+		}
+		return result;
+	}
+
+	this.reset = function ()
+	{
+		for (let propName in this) {
+			delete this[propName];
+		}
+
+		this.mainViewId = null;
+		this.workingViewId = null;
+	}
+}
+ProcessingInfo.prototype = new Object;
+
+// -------------------------------------
+// CLASS ConsoleBlock
+
+function ConsoleBlock() {
+	this.messageLevel = 0;
+	
+	this.writeMessage = function (text, useSeparatorBefore = true, useSeparatorAfter = true, level = 0, warning = false)
+	{
+		let textLine = this.levelPadLeft("║", level);
+		let orgPadding = textLine.length;
+		for (let i = 0; i < PADDING; i++) {
+			textLine += " ";
+		}
+		let preamble = textLine.length;
+
+		if (useSeparatorBefore) {
+			if (!warning) {
+				Console.noteln(this.getSeparator(level, true));
+			} else {
+				Console.warningln(this.getSeparator(level, true));
+			}
+		}
+
+		if(text != null) {
+			if (text.length + textLine.length + PADDING > CONSOLE_WIDTH) {
+				let split = text.split(" ");
+				let paddedLength = preamble + PADDING;
+				for (let i = 0; i < split.length; i++) {
+					if (paddedLength + split[i].length + PADDING > CONSOLE_WIDTH) {
+						split[i] = split[i].substring(0, CONSOLE_WIDTH - (paddedLength + 4)) + "...";
+					}
+				}
+				while (split.length > 0) {
+					do {
+						processEvents();
+						if (split.length === 0) break;
+						if (textLine.length + split[0].length + " ".length + PADDING > CONSOLE_WIDTH) {
+							break;
+						}
+
+						textLine += split[0] + " ";
+						paddedLength = textLine.length + PADDING;
+						split.shift();
+					} while (true);
+					textLine = this.padTextRight(textLine);
+					if (!warning) {
+						Console.noteln(textLine);
+					} else {
+						Console.warningln(textLine);
+					}
+					textLine = this.levelPadLeft("║", level);
+					for (let i = 0; i < preamble - orgPadding; i++) {
+						textLine += " ";
+					}
+				}
+			} else {
+				if (!warning) {
+					Console.noteln(this.padTextRight(textLine + text));
+				} else {
+					Console.warningln(this.padTextRight(textLine + text));
+				}
+			}
+		}
+
+		if (useSeparatorAfter) {
+			if (!warning) {
+				Console.noteln(this.getSeparator(level, false));
+			} else {
+				Console.warningln(this.getSeparator(level, false));
+			}
+		}
+	}
+
+	this.getSeparator = function (level, top) {
+		let leftChar = "╔";
+		if (!top) leftChar = "╚";
+		let rightChar = "╗";
+		if (!top) rightChar = "╝";
+		let separator = this.levelPadLeft(leftChar, level)
+		for (let i = separator.length; i < CONSOLE_WIDTH - 1; i++) {
+			separator += "═";
+		}
+		separator += rightChar;
+		return separator;
+	}
+
+	this.levelPadLeft = function (text, level) {
+		let padText = "";
+		for (let i = 0; i < level * PADDING; i++) {
+			if (i % PADDING === 0) padText += "║";
+			else padText += " ";
+		}
+
+		return padText + text;
+	}
+
+	this.padTextRight = function (text) {
+		while (text.length < CONSOLE_WIDTH - 1) {
+			text += " ";
+		}
+		text += "║";
+		return text;
+	}
+
+	this.writeMessageBlock = function (text, useBorders = true, decreaseLevel = false) {
+		if (decreaseLevel) this.messageLevel--;
+		this.writeMessage(text, useBorders, useBorders, this.messageLevel);
+		if (decreaseLevel) this.messageLevel++;
+	}
+
+	this.writeWarningBlock = function (text, useBorders, decreaseLevel = false) {
+		if (decreaseLevel) this.messageLevel--;
+		this.writeMessage(text, useBorders, useBorders, this.messageLevel, true);
+		if (decreaseLevel) this.messageLevel++;
+	}
+
+	this.writeMessageStart = function (text) {
+		this.writeMessage(text, true, false, this.messageLevel);
+		this.messageLevel++;
+	}
+
+	this.writeMessageEnd = function (text) {
+		this.messageLevel--;
+		this.messageLevel < 0 ? this.messageLevel = 0 : this.messageLevel;
+		this.writeMessage(text, false, true, this.messageLevel);
+	}
+}
+ConsoleBlock.prototype = new Object;
+
+// -------------------------------------
+// CLASS JobProcessor
+
+function ProcessStack()
+{
+	this._stack = [];
+
+	this.startProcessing = function () {
+		this._stack.push(true);
+		GlobalDialog.recalculateAll();
+	}
+
+	this.stopProcessing = function () {
+		this._stack.pop();
+	}
+
+	this.isProcessing = function () {
+		return this._stack.length !== 0;
+	}
+}
 
 // #region Utility
-ProcessingInfo.prototype.toString = function() {
-    for (let propName in this) {
-        propValue = this[propName]
-        console.writeln(this.constructor.name + "." +propName + " = " + propValue);
-    }
-}
 
 Object.prototype.printPropertiesDebug = function() {
 	for (let propName in this) {
-        propValue = this[propName]
-        console.writeln(this.constructor.name + "." +propName + " = " + propValue);
-    }
-}
-
-function waitForS(seconds) {
-	let sleepT = 0;
-    while (sleepT < seconds) {
-        let sleepS = 0.1;
-        sleep(sleepS);
-        processEvents();
-        sleepT += sleepS;
-    }
-}
-
-function getValueOrDefault(value, defaultValue) {
-	if(value == null || value === undefined) return defaultValue;
-	return value;
+		Console.writeln(this.constructor.name + "." +propName + " = " + this[propName]);
+	}
 }
 
 Array.prototype.removeItem = function(item) {
@@ -96,168 +243,29 @@ Array.prototype.removeItem = function(item) {
 	}
 }
 
-function startProcessing() {
-	PROCESSING.push(true);
-	dialog.recalculateAll();
-}
-
-function stopProcessing() {
-	PROCESSING.pop();
-}
-
-function isProcessing() {
-	return PROCESSING.length != 0;
-}
-
 String.prototype.format = function () {
-	var a = this;
-	for (var k in arguments) {
+	let a = this;
+	for (let k in arguments) {
 		a = a.replace(new RegExp("\\{" + k + "\\}", 'g'), arguments[k]);
 	}
 	return a
 }
 
-function writeMessage(text, useSeparatorBefore = true, useSeparatorAfter = true, level = 0, warning = false) {
-	let textLine = levelPadLeft("║", level);
-	let orgPadding = textLine.length;
-	for (let i = 0; i < PADDING; i++) {
-		textLine += " ";
-	}
-	let preamble = textLine.length;
-
-	if (useSeparatorBefore) {
-		if (!warning) {
-			console.noteln(getSeparator(level, true));
-		} else {
-			console.warningln(getSeparator(level, true));
-		}
-	}
-
-	if(text != null) {
-		if (text.length + textLine.length + PADDING > CONSOLE_WIDTH) {
-			let split = text.split(" ");
-			let paddedLength = preamble + PADDING;
-			for (let i = 0; i < split.length; i++) {
-				if (paddedLength + split[i].length + PADDING > CONSOLE_WIDTH) {
-					split[i] = split[i].substring(0, CONSOLE_WIDTH - (paddedLength + 4)) + "...";
-				}
-			}
-			while (split.length > 0) {
-				do {
-					processEvents();
-					if (split.length == 0) break;
-					if (textLine.length + split[0].length + " ".length + PADDING > CONSOLE_WIDTH) {
-						break;
-					}
-
-					textLine += split[0] + " ";
-					paddedLength = textLine.length + PADDING;
-					split.shift();
-				} while (true);
-				textLine = padTextRight(textLine);
-				if (!warning) {
-					console.noteln(textLine);
-				} else {
-					console.warningln(textLine);
-				}
-				textLine = levelPadLeft("║", level);
-				for (let i = 0; i < preamble - orgPadding; i++) {
-					textLine += " ";
-				}
-			}
-		} else {
-			if (!warning) {
-				console.noteln(padTextRight(textLine + text));
-			} else {
-				console.warningln(padTextRight(textLine + text));
-			}
-		}
-	}
-
-	if (useSeparatorAfter) {
-		if (!warning) {
-			console.noteln(getSeparator(level, false));
-		} else {
-			console.warningln(getSeparator(level, false));
-		}
-	}
-}
-
-function getSeparator(level, top) {
-	let leftChar = "╔";
-	if (!top) leftChar = "╚";
-	let rightChar = "╗";
-	if (!top) rightChar = "╝";
-	let separator = levelPadLeft(leftChar, level)
-	for (let i = separator.length; i < CONSOLE_WIDTH - 1; i++) {
-		separator += "═";
-	}
-	separator += rightChar;
-	return separator;
-}
-
-
-function levelPadLeft(text, level) {
-	let padText = "";
-	for (let i = 0; i < level * PADDING; i++) {
-		if (i % PADDING == 0) padText += "║";
-		else padText += " ";
-	}
-
-	return padText + text;
-}
-
-function padTextRight(text) {
-	while (text.length < CONSOLE_WIDTH - 1) {
-		text += " ";
-	}
-	text += "║";
-	return text;
-}
-
-function writeMessageBlock(text, useborders = true, decreaseLevel = false) {
-	if (decreaseLevel) commonMessageLevel--;
-	writeMessage(text, useborders, useborders, commonMessageLevel);
-	if (decreaseLevel) commonMessageLevel++;
-}
-
-function writeWarningBlock(text, useborders, decreaseLevel = false) {
-	if (decreaseLevel) commonMessageLevel--;
-	writeMessage(text, useborders, useborders, commonMessageLevel, true);
-	if (decreaseLevel) commonMessageLevel++;
-}
-
-function writeMessageStart(text) {
-	writeMessage(text, true, false, commonMessageLevel);
-	commonMessageLevel++;
-}
-
-function writeMessageEnd(text) {
-	commonMessageLevel--;
-	commonMessageLevel < 0 ? commonMessageLevel = 0 : commonMessageLevel;
-	writeMessage(text, false, true, commonMessageLevel);
-}
-
-function getStarNet() {
+function getStarNet(useStarNet2 = true) {
 	try {
-		return new StarNet;
+		return useStarNet2 ? new StarNet2 : new StarNet;
 	} catch (e) {
 		return null;
 	}
 }
 
-
 function readFromSettingsOrDefault(key, type, defaultVal) {
 	let value = Settings.read(key, type);
-	if (Settings.lastReadOK) {
-		return value;
-	}
-
-	return defaultVal;
+	return Settings.lastReadOK ? value : defaultVal;
 }
 
 function readImage(filePath, ignoreKeywords = false) {
-	startProcessing();
+	JobStack.startProcessing();
 	let ext = File.extractExtension(filePath);
 	let fileFormat = new FileFormat(ext, true/*toRead*/, false/*toWrite*/);
 
@@ -267,8 +275,8 @@ function readImage(filePath, ignoreKeywords = false) {
 	try {
 		image = fileFormatInstance.open(filePath, "fits-keywords normalize raw cfa");
 	} catch(e) {
-		writeWarningBlock("Could not read file");
-		stopProcessing();
+		ConsoleWriter.writeWarningBlock("Could not read file");
+		JobStack.stopProcessing();
 		return null;
 	}
 
@@ -284,7 +292,7 @@ function readImage(filePath, ignoreKeywords = false) {
 	view.beginProcess(UndoFlag_NoSwapFile);
 
 	if (!fileFormatInstance.readImage(view.image)) {
-		stopProcessing();
+		JobStack.stopProcessing();
 		view.endProcess();
 		throw new Error("Unable to read file: " + filePath);
 	}
@@ -293,7 +301,7 @@ function readImage(filePath, ignoreKeywords = false) {
 		if (fileFormat.supportsViewProperties) {
 			let info = view.importProperties(fileFormatInstance);
 			if (info.isEmpty)
-				console.criticalln("<end><cbr>*** Error reading image properties:\n", info);
+				Console.criticalln("<end><cbr>*** Error reading image properties:\n", info);
 		}
 
 	if (fileFormat.canStoreKeywords && !ignoreKeywords)
@@ -303,25 +311,25 @@ function readImage(filePath, ignoreKeywords = false) {
 
 	fileFormatInstance.close();
 
-	stopProcessing();
+	JobStack.stopProcessing();
 	return window;
-};
+}
 
 function sanitizeViewId(id) {
-	var fId = "";
-	if (id.length == 0) {
+	let fId = "";
+	if (id.length === 0) {
 		return "_";
 	}
-	var c = id.charAt(0);
+	let c = id.charAt(0);
 	if ("0" <= c && c <= "9") {
 		fId = fId + "_";
 	}
-	for (var i = 0; i != id.length; ++i) {
+	for (let i = 0; i !== id.length; ++i) {
 		c = id.charAt(i);
 		fId = fId + (
 			(("0" <= c && c <= "9") || ("a" <= c && c <= "z") || ("A" <= c && c <= "Z")) ? c : "_"
 		);
-		if (fId.length > 3 && fId.substring(fId.length - 4, fId.length) == "____") {
+		if (fId.length > 3 && fId.substring(fId.length - 4, fId.length) === "____") {
 			fId = fId.substring(0, fId.length - 1);
 		}
 	}
@@ -329,18 +337,21 @@ function sanitizeViewId(id) {
 }
 
 function printProperties(view) {
-	writeMessageStart("Properties of " + view.id);
+	ConsoleWriter.writeMessageStart("Properties of " + view.id);
 	for (let i = 0; i < view.properties.length; i++) {
-		writeMessageBlock(view.properties[i] + " = " + view.propertyValue(view.properties[i]), false, true);
+		ConsoleWriter.writeMessageBlock(view.properties[i] + " = " + view.propertyValue(view.properties[i]), false, true);
 	}
-	writeMessageEnd()
+	ConsoleWriter.writeMessageEnd()
 }
 
 // #endregion Utilities
 
 // #region Image Modification
 function cloneProperties(oldView, newView, func = null) {
-	//console.warningln("Cloning properties from " + oldView.id + " to " + newView.id);
+	#ifdef DEBUG
+	Console.warningln("Cloning properties from " + oldView.id + " to " + newView.id);
+	#endif
+
 	let oldProperties = [];
 	for (let i = 0; i < oldView.properties.length; i++) {
 		oldProperties.push([oldView.properties[i], oldView.propertyValue(oldView.properties[i]), oldView.propertyAttributes((oldView.properties[i]))]);
@@ -353,7 +364,9 @@ function cloneProperties(oldView, newView, func = null) {
 		try {
 			newView.setPropertyValue(oldProperties[i][0], oldProperties[i][1]);
 			newView.setPropertyAttributes(oldProperties[i][0], oldProperties[i][2]);
-			//console.warningln("prop " + oldProperties[i][0] + ":" + oldProperties[i][1]);
+			#ifdef DEBUG
+			Console.warningln("prop " + oldProperties[i][0] + ":" + oldProperties[i][1]);
+			#endif
 		} catch (e) { /* probably some reserved property */ }
 	}
 
@@ -365,7 +378,6 @@ function cloneProperties(oldView, newView, func = null) {
 View.prototype.storeProperty = function(property, value) {
 	this.setPropertyValue(property, value, PropertyType_Auto, StorePropertyAttribute);
 }
-
 
 function convertFromViewStf(stf) {
 	let newStf = [];
@@ -384,7 +396,7 @@ function convertToViewStf(stf) {
 }
 
 function doSTF(view, stf = null, unlinked = false) {
-	var transformation = [
+	let transformation = [
 		[0, 1, 0.5, 0, 1],
 		[0, 1, 0.5, 0, 1],
 		[0, 1, 0.5, 0, 1],
@@ -392,8 +404,8 @@ function doSTF(view, stf = null, unlinked = false) {
 
 	if (stf == null) {
 		//get values from the image to calculate STF
-		var median = view.computeOrFetchProperty("Median");
-		var mad = view.computeOrFetchProperty("MAD");
+		let median = view.computeOrFetchProperty("Median");
+		let mad = view.computeOrFetchProperty("MAD");
 
 		//set variables
 		let targetBackground = DEFAULT_AUTOSTRETCH_TGBND;
@@ -401,9 +413,9 @@ function doSTF(view, stf = null, unlinked = false) {
 
 		if ((!unlinked && !view.image.isGrayscale) || view.image.isGrayscale) {
 			// calculate STF settings based on DeLinear Script
-			var clipping = (1 + mad.at(0) != 1) ?
+			let clipping = (1 + mad.at(0) !== 1) ?
 				Math.range(median.at(0) + shadowsClipping * mad.at(0), 0.0, 1.0) : 0.0;
-			var targetMedian = Math.mtf(targetBackground, median.at(0) - clipping);
+			let targetMedian = Math.mtf(targetBackground, median.at(0) - clipping);
 
 			transformation[0] = [clipping, 1, targetMedian, 0, 1];
 			if(!view.image.isGrayscale) {
@@ -413,9 +425,9 @@ function doSTF(view, stf = null, unlinked = false) {
 		} else {
 			for (let i = 0; i < 3; i++) {
 				// calculate STF settings based on DeLinear Script
-				var clipping = (1 + mad.at(i) != 1) ?
+				let clipping = (1 + mad.at(i) !== 1) ?
 					Math.range(median.at(i) + shadowsClipping * mad.at(i), 0.0, 1.0) : 0.0;
-				var targetMedian = Math.mtf(targetBackground, median.at(i) - clipping);
+				let targetMedian = Math.mtf(targetBackground, median.at(i) - clipping);
 
 				transformation[i] = [clipping, 1, targetMedian, 0, 1];
 			}
@@ -424,7 +436,7 @@ function doSTF(view, stf = null, unlinked = false) {
 		transformation = stf;
 	}
 
-	var STFunction = new ScreenTransferFunction();
+	let STFunction = new ScreenTransferFunction();
 	STFunction.STF = transformation;
 
 	STFunction.executeOn(view);
@@ -434,12 +446,12 @@ function doSTF(view, stf = null, unlinked = false) {
 
 // applies ht transformation on current image
 function doHistogramTransformation(view) {
-	var HT = new HistogramTransformation;
+	let HT = new HistogramTransformation;
 
 	if (view.image.isGrayscale) {
 		//get values from STF
-		var clipping = view.stf[0][1];
-		var median = view.stf[0][0];
+		let clipping = view.stf[0][1];
+		let median = view.stf[0][0];
 		HT.H = [[0, 0.5, 1.0, 0, 1.0],
 		[0, 0.5, 1.0, 0, 1.0],
 		[0, 0.5, 1.0, 0, 1.0],
@@ -475,7 +487,7 @@ function doResetSTF(view) {
 
 // stretches view to target value
 function stretchToValue(view, target) {
-	var AH = new AutoHistogram;
+	let AH = new AutoHistogram;
 	AH.clip = false;
 	AH.stretch = true;
 	AH.stretchTogether = true;
@@ -490,16 +502,16 @@ function stretchToValue(view, target) {
 //uses NoiseEvaluation script to get an estimation of the background noise. Returns stdev
 function noiseEvaluation(window) {
 
-	var img = window.mainView.image;
+	let img = window.mainView.image;
 
-	var a, n = 4, m = 0.01 * img.selectedRect.area;
+	let a, n = 4, m = 0.01 * img.selectedRect.area;
 
 	for (; ;) {
 		a = img.noiseMRS(n);
 		if (a[1] >= m)
 			break;
-		if (--n == 1) {
-			console.writeln("Issue with MRS noise evaluation (did not converge). Using k-sigma noise evaluation. Try using manually selected preview for noise estimation.");
+		if (--n === 1) {
+			Console.writeln("Issue with MRS noise evaluation (did not converge). Using k-sigma noise evaluation. Try using manually selected preview for noise estimation.");
 			break;
 		}
 	}
@@ -510,7 +522,7 @@ function noiseEvaluation(window) {
 function EZ_ScaledNoiseEvaluation(image)
 {
    let scale = image.Sn();
-   if ( 1 + scale == 1 )
+   if ( 1 + scale === 1 )
       throw Error( "Zero or insignificant data." );
 
    let a, n = 4, m = 0.01*image.selectedRect.area;
@@ -519,9 +531,9 @@ function EZ_ScaledNoiseEvaluation(image)
       a = image.noiseMRS( n );
       if ( a[1] >= m )
          break;
-      if ( --n == 1 )
+      if ( --n === 1 )
       {
-         console.writeln( "<end><cbr>** Warning: No convergence in MRS noise evaluation routine - using k-sigma noise estimate." );
+         Console.writeln( "<end><cbr>** Warning: No convergence in MRS noise evaluation routine - using k-sigma noise estimate." );
          a = image.noiseKSigma();
          break;
       }
@@ -533,14 +545,14 @@ function EZ_ScaledNoiseEvaluation(image)
 
 // copies an existing view to a new name
 function cloneView(view, newName, hide = false, convertToColor = false) {
-	var newWindow = new ImageWindow(view.image.width, view.image.height, convertToColor ? 3 : view.image.numberOfChannels,
-		view.window.bitsPerSample, view.window.isFloatSample, view.image.colorSpace != ColorSpace_Gray || convertToColor,
+	let newWindow = new ImageWindow(view.image.width, view.image.height, convertToColor ? 3 : view.image.numberOfChannels,
+		view.window.bitsPerSample, view.window.isFloatSample, view.image.colorSpace !== ColorSpace_Gray || convertToColor,
 		newName);
 
 	newWindow.mainView.beginProcess(UndoFlag_NoSwapFile);
 
 	newWindow.mainView.image.assign(view.image);
-	if(convertToColor && view.image.colorSpace == 0) 
+	if(convertToColor && view.image.colorSpace === 0)
 	{
 		newWindow.mainView.image.colorSpace = 1;
 	}
@@ -561,8 +573,8 @@ function extractLightness(view) {
 	let clonedView = null;
 
 	if (view.image.isColor) {
-		writeMessageBlock("Original image is color, extracting luminance");
-		var lumExtraction = new ChannelExtraction;
+		ConsoleWriter.writeMessageBlock("Original image is color, extracting luminance");
+		let lumExtraction = new ChannelExtraction;
 		lumExtraction.colorSpace = ChannelExtraction.prototype.CIELab;
 		lumExtraction.channels = [
 			[true, ""],
@@ -581,8 +593,8 @@ function extractLightness(view) {
 }
 
 function createBackgroundMask(view, maskName, stretch = true) {
-	startProcessing();
-	writeMessageStart("Creating background mask based on " + view.id);
+	JobStack.startProcessing();
+	ConsoleWriter.writeMessageStart("Creating background mask based on " + view.id);
 	let lightnessClone = extractLightness(view);
 	if(stretch)
 		doStretch(lightnessClone);
@@ -590,8 +602,8 @@ function createBackgroundMask(view, maskName, stretch = true) {
 	lightnessClone.window.forceClose();
 	backgroundMaskView.id = maskName;
 	backgroundMaskView.window.iconize();
-	writeMessageEnd("Mask creation done");
-	stopProcessing();
+	ConsoleWriter.writeMessageEnd("Mask creation done");
+	JobStack.stopProcessing();
 	return backgroundMaskView.id;
 }
 
@@ -612,7 +624,7 @@ View.prototype.readPropertyOrKeyword = function(property, keyword) {
 		let keywords = this.window.keywords;
 		for(let i = 0;i<keywords.length;i++) {
 			let fitskeyword = new FITSKeyword(keywords[i]);
-			if(fitskeyword.name == keyword) { 
+			if(fitskeyword.name === keyword) {
 				return fitskeyword.strippedValue;
 			}
 		}
@@ -623,14 +635,14 @@ View.prototype.readPropertyOrKeyword = function(property, keyword) {
 }
 
 function doStretch(view) {
-	writeMessageBlock("Stretching image");
+	ConsoleWriter.writeMessageBlock("Stretching image");
 	doSTF(view);
 	doHistogramTransformation(view);
 }
 
 function doPixelMath(view, expression, useSingleExpression = true) {
     cloneProperties(view, view, function () {
-        var pixelMath = new PixelMath;
+        let pixelMath = new PixelMath;
         if (useSingleExpression) {
             pixelMath.expression = expression;
             pixelMath.expression1 = "";
@@ -697,7 +709,7 @@ function findMidtonesBalance(v0, v1, eps) {
 	else
 		eps = Math.max(1.0e-10, eps);
 
-	var m0, m1;
+	let m0, m1;
 	if (v1 < v0) {
 		m0 = 0;
 		m1 = 0.5;
@@ -708,8 +720,8 @@ function findMidtonesBalance(v0, v1, eps) {
 	}
 
 	for (; ;) {
-		var m = 0.5 * (m0 + m1);
-		var v = Math.mtf(m, v1);
+		let m = 0.5 * (m0 + m1);
+		let v = Math.mtf(m, v1);
 
 		processEvents();
 
@@ -743,12 +755,12 @@ function generateNoiseEvalImage(noiseEvalValues) {
 	graphics.antialiasing = true;
 	graphics.fillRect(0, 0, xScale, yScale, new Brush(0xFF202020));
 
-	if(noiseEvalValuesString == null || vals.length == 0) {
+	if(noiseEvalValuesString == null || vals.length === 0) {
 		graphics.end();
 		return bitmap;
 	}
 
-	writeMessageBlock("Generating Noise Evaluation Image");
+	ConsoleWriter.writeMessageBlock("Generating Noise Evaluation Image");
 
 	// find minVal
 	let minVal = vals[0];
@@ -769,8 +781,8 @@ function generateNoiseEvalImage(noiseEvalValues) {
 	let radius = 2.5;
 	let xValScale = ((xScale-radius*2)/(vals.length-1));
 
-	var px = 0xFFAAAAAA;
-	var points = [];
+	const px = 0xFFAAAAAA;
+	let points = [];
 	for(let i = 0;i<vals.length;i++) {
 		let val = vals[i];
 		let yPos = (yScale-radius*2)*((val-minVal)/(maxVal-minVal));
@@ -798,7 +810,7 @@ function generateHistogramImage(view) {
 	let xScale = 450;
 	let yScale = 250;
 
-	writeMessageBlock("Generating Histogram Image");
+	ConsoleWriter.writeMessageBlock("Generating Histogram Image");
 
 	let histogramMatrix = view.computeOrFetchProperty("Histogram16");
 	let htStep = parseInt(histogramMatrix.cols / xScale);
@@ -806,7 +818,7 @@ function generateHistogramImage(view) {
 
 	let matrixarray = histogramMatrix.toArray();
 	let rgb = [];
-	if (histogramMatrix.rows == 1) {
+	if (histogramMatrix.rows === 1) {
 		rgb.push(matrixarray);
 	}
 	else {
@@ -845,7 +857,7 @@ function generateHistogramImage(view) {
 		newChannelMatrix.push([]);
 		for (let i = 0; i < histogramMatrix.cols; i++) {
 			summedValue.push(histogramMatrix.at(rgbc, i));
-			if (i % htStep == 0) {
+			if (i % htStep === 0) {
 				newChannelMatrix[rgbc].push(Math.maxElem(summedValue) * scaleMult);
 				summedValue = [];
 			}
@@ -865,21 +877,21 @@ function generateHistogramImage(view) {
 	}
 
 	for (let i = 0; i < newChannelMatrix[0].length; i++) {
-		if (newChannelMatrix.length == 1) {
+		if (newChannelMatrix.length === 1) {
 			for (let j = 0; j < yScale; j++) {
-				var px = 0xAA000000;
+				let px = 0xAA000000;
 				if (newChannelMatrix[0][i] > j) px |= 0x00CCCCCC;
-				if (px != 0xAA000000) {
+				if (px !== 0xAA000000) {
 					graphics.fillRect(i, yScale - j, i, yScale - j, new Brush(px));
 				}
 			}
 		} else {
 			for (let j = 0; j < yScale; j++) {
-				var px = 0xAA000000;
+				let px = 0xAA000000;
 				if (newChannelMatrix[0][i] > j) px |= 0x00FF0000;
 				if (newChannelMatrix[1][i] > j) px |= 0x0000FF00;
 				if (newChannelMatrix[2][i] > j) px |= 0x000000FF;
-				if (px != 0xAA000000) {
+				if (px !== 0xAA000000) {
 					graphics.fillRect(i, yScale - j, i, yScale - j, new Brush(px));
 				}
 			}
@@ -898,9 +910,9 @@ function generateHistogramImage(view) {
 Control.prototype.bindings = null;
 
 Control.prototype.evaluateBindings = function() {
-	//console.warningln("Evaluating bindings for " + this.constructor.name + ", parent: " + (this.parent == null ? "-" : this.parent.constructor.name));
+	//Console.warningln("Evaluating bindings for " + this.constructor.name + ", parent: " + (this.parent == null ? "-" : this.parent.constructor.name));
 	if(this.bindings != null) {
-		//console.warningln("Evaluating bindings for " + this.constructor.name + ", parent: " + (this.parent == null ? "-" : this.parent.constructor.name));
+		//Console.warningln("Evaluating bindings for " + this.constructor.name + ", parent: " + (this.parent == null ? "-" : this.parent.constructor.name));
 		if(this.hasFocus != null && !this.hasFocus)
 			this.bindings();
 	}
@@ -940,7 +952,7 @@ Sizer.prototype.recalculateAll = function(previous) {
 	if(this.evaluateBindings != null) {
 		this.evaluateBindings();
 	}
-	//console.warningln("Previous " + previous);
+	//Console.warningln("Previous " + previous);
 	for(let i = 0;i<this.items.length;i++) {
 		let item = this.items[i];
 		let alreadyProcessed = false;
@@ -967,7 +979,7 @@ Dialog.prototype.recalculateAll = function() {
 	this.sizer.recalculateAll(this.evaluatedBindings);
 	processEvents();
 	//const end = Date.now() - start;
-	//console.writeln("BindingCalc took " + end + "ms");
+	//Console.writeln("BindingCalc took " + end + "ms");
 }
 
 Sizer.prototype.items = [];
@@ -987,7 +999,7 @@ Sizer.prototype.clearMargin = function(previous) {
 		if(alreadyProcessed) continue;
 		previous.push(item);
 
-		if(item.constructor.name == "Sizer" && this.parentControl != null && typeof this.parentControl != "Dialog") {
+		if(item.constructor.name === "Sizer" && this.parentControl != null && this.parentControl.constructor.name !== "Dialog") {
 			item.scaledMargin = 0;
 			item.clearMargin(previous);
 		}
@@ -995,8 +1007,8 @@ Sizer.prototype.clearMargin = function(previous) {
 }
 
 Sizer.prototype.addItem = function(item, stretchFactor = 0) {
-	//console.warningln("Adding " + item.constructor.name + " to " + this.constructor.name);
-	if(item.constructor.name == "Sizer" && this.parentControl != null && this.parentControl.constructor.name != "Dialog") {
+	//Console.warningln("Adding " + item.constructor.name + " to " + this.constructor.name);
+	if(item.constructor.name === "Sizer" && this.parentControl != null && this.parentControl.constructor.name !== "Dialog") {
 		item.clearMargin([]);
 	}
 	this.items.push(item); 
@@ -1042,11 +1054,12 @@ function SpacedRichLabel(parent) {
 	this.useRichText = true;
 	this.wordWrapping = true;
 }
+SpacedRichLabel.prototype = new Label;
 
 TabBox.prototype.findControl = function (title) {
 	for (let i = 0; i < this.numberOfPages; i++) {
 		let foundTitle = this.pageLabel(i);
-		if (foundTitle == title) {
+		if (foundTitle === title) {
 			return this.pageControlByIndex(i);
 		}
 	}
@@ -1056,7 +1069,7 @@ TabBox.prototype.findControl = function (title) {
 
 TabBox.prototype.findControlIndex = function (control) {
 	for (let i = 0; i < this.numberOfPages; i++) {
-		if (this.pageControlByIndex(i) == control) {
+		if (this.pageControlByIndex(i) === control) {
 			return i;
 		}
 	}
@@ -1064,26 +1077,11 @@ TabBox.prototype.findControlIndex = function (control) {
 	return -1;
 }
 
-// this just doesn't work, the bindings don't take and I don't know why
-/*myDialog.prototype.replaceMainControl = function (uielement) {
-	console.writeln("replacing");
-	var index = this.controlSizer.indexOf(this.mainControl);
-	this.controlSizer.removeItem(this.mainControl);
-	this.mainControl.hide();
-	this.mainControl = uielement;
-	this.controlSizer.insertItem(index, uielement);
-	this.mainControl.bindings = function() {
-		console.writeln('bla');
-		this.enabled = CurrentProcessingInfo.mainViewId != null;
-	}
-}*/
-
-
-function myDialog(fullname, author) {
+function EzDialog(fullname, author) {
 	this.__base__ = Dialog
 	this.__base__();
 
-	this.windowTitle = fullname + " © 2020 " + author + " [EZ Common Runtime v" + COMMONVERSION + "]";
+	this.windowTitle = fullname + " © 2020 " + author + " [EZ Common Runtime v" + CommonVersion + "]";
 
 	this.scaledMinWidth = 450;
 
@@ -1097,33 +1095,33 @@ function myDialog(fullname, author) {
 	}
 
 	this.onExit = function () {
-		console.warningln("calling empty onExit() function from dialog. Override to suppress this warning.");
+		Console.warningln("calling empty onExit() function from GlobalDialog. Override to suppress this warning.");
 	}
 
 	this.onEmptyMainView = function () {
-		console.warningln("calling empty onEmptyMainView() function from dialog. Override to suppress this warning.");
+		Console.warningln("calling empty onEmptyMainView() function from GlobalDialog. Override to suppress this warning.");
 	}
 
 	this.onSelectedMainView = function () {
-		console.warningln("calling empty onSelectedMainView() function from dialog. Override to suppress this warning.");
+		Console.warningln("calling empty onSelectedMainView() function from GlobalDialog. Override to suppress this warning.");
 	}
 
 	this.onEvaluate = function () {
-		console.warningln("calling empty onEvaluate() function from dialog. Override to suppress this warning.")
+		Console.warningln("calling empty onEvaluate() function from GlobalDialog. Override to suppress this warning.")
 	}
 
 	this.canEvaluate = function () {
-		console.warningln("calling empty canEvaluate() function from dialog. Override to suppress this warning. Assuming value 'true'");
+		Console.warningln("calling empty canEvaluate() function from GlobalDialog. Override to suppress this warning. Assuming value 'true'");
 		return true;
 	}
 
 	this.canRun = function () {
-		console.warningln("calling empty canRun() function from dialog. Override to suppress this warning. Assuming value 'true'");
+		Console.warningln("calling empty canRun() function from GlobalDialog. Override to suppress this warning. Assuming value 'true'");
 		return true;
 	}
 
 	this.bindings = function() {
-		this.enabled = !isProcessing();
+		this.enabled = !JobStack.isProcessing();
 		if(this.customBindings != null) this.customBindings();
 	}
 	
@@ -1138,14 +1136,14 @@ function myDialog(fullname, author) {
 		}
 	}
 
-	this.tutorialPrerequisites = ["Empty Prerequisites", "Set dialog.tutorialPrerequisites"];
-	this.tutorialSteps = ["Emtpy steps", "Set dialog.tutorialSteps"];
+	this.tutorialPrerequisites = ["Empty Prerequisites", "Set GlobalDialog.tutorialPrerequisites"];
+	this.tutorialSteps = ["Empty steps", "Set GlobalDialog.tutorialSteps"];
 
 	this.findControlInTabBox = function (title) {
-		for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-			let foundTitle = dialog.tabBox.pageLabel(i);
-			if (foundTitle == title) {
-				return dialog.tabBox.pageControlByIndex(i);
+		for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+			let foundTitle = GlobalDialog.tabBox.pageLabel(i);
+			if (foundTitle === title) {
+				return GlobalDialog.tabBox.pageControlByIndex(i);
 			}
 		}
 
@@ -1153,8 +1151,8 @@ function myDialog(fullname, author) {
 	}
 
 	this.findControlIndexInTabBox = function (control) {
-		for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-			if (dialog.tabBox.pageControlByIndex(i) == control) {
+		for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+			if (GlobalDialog.tabBox.pageControlByIndex(i) === control) {
 				return i;
 			}
 		}
@@ -1163,20 +1161,20 @@ function myDialog(fullname, author) {
 	}
 
 	this.infoBox = new SpacedRichLabel(this);
-	with (this.infoBox) {
-		frameStyle = FrameStyle_Box;
-		text = "Empty Placeholder Text, set dialog.infoBox.text to replace this text";
-	}
+	this.infoBox.frameStyle = FrameStyle_Box;
+	this.infoBox.text = "Empty Placeholder Text, set GlobalDialog.infoBox.text to replace this text";
 
 	this.showWarningDialog = function (text, title = "Error", okText = "Understood", canCancel = false) {
 		let warningDialog = new Dialog(this);
 		warningDialog.windowTitle = title;
 		warningDialog.setScaledFixedWidth(400);
+
 		let errorLabel = new SpacedRichLabel(warningDialog);
 		errorLabel.text = text;
 		errorLabel.wordWrapping = true;
 		warningDialog.sizer = new SpacedVerticalSizer(warningDialog);
 		warningDialog.sizer.addItem(errorLabel);
+
 		let understoodButton = new PushButton(warningDialog);
 		understoodButton.text = okText;
 		understoodButton.onClick = function () {
@@ -1240,12 +1238,12 @@ function myDialog(fullname, author) {
 		helpDialog.setScaledFixedWidth(600);
 		let errorLabel = new Label(helpDialog);
 		errorLabel.text = "<b>Prerequisites:</b><ul>"
-		for (let i = 0; i < dialog.tutorialPrerequisites.length; i++) {
-			errorLabel.text += "<li>" + dialog.tutorialPrerequisites[i] + "</li>";
+		for (let i = 0; i < GlobalDialog.tutorialPrerequisites.length; i++) {
+			errorLabel.text += "<li>" + GlobalDialog.tutorialPrerequisites[i] + "</li>";
 		}
 		errorLabel.text += "</ul><b>Steps:</b><ul>"
-		for (let i = 0; i < dialog.tutorialSteps.length; i++) {
-			errorLabel.text += "<li>" + dialog.tutorialSteps[i] + "</li>";
+		for (let i = 0; i < GlobalDialog.tutorialSteps.length; i++) {
+			errorLabel.text += "<li>" + GlobalDialog.tutorialSteps[i] + "</li>";
 		}
 		errorLabel.text += "</ul>";
 		errorLabel.useRichText = true;
@@ -1264,103 +1262,87 @@ function myDialog(fullname, author) {
 	}
 
 	this.mainViewSelector = new ViewList(this);
-	with (this.mainViewSelector) {
-		toolTip = "Select the image to process";
-		onViewSelected = function (value) {
-			startProcessing();
-			let prevMainViewId = CurrentProcessingInfo.mainViewId;
-			if (value.isNull) {
-				dialog.onEmptyMainView.call(dialog);
-				CurrentProcessingInfo.mainViewId = null;
-				stopProcessing();
-				return;
-			}
-
-			CurrentProcessingInfo.mainViewId = value.isPreview ? value.window.mainView.id : value.id;
-			CurrentProcessingInfo.workingViewId = value.isPreview ? value.fullId : value.id;
-			writeMessageBlock("Selected image '" + CurrentProcessingInfo.workingViewId + "'");
-			dialog.onSelectedMainView.call(dialog, value, prevMainViewId);
-			stopProcessing();
+	this.mainViewSelector.toolTip = "Select the image to process";
+	this.mainViewSelector.onViewSelected = function (value) {
+		JobStack.startProcessing();
+		let prevMainViewId = CurrentProcessingInfo.mainViewId;
+		if (value.isNull) {
+			GlobalDialog.onEmptyMainView.call(GlobalDialog);
+			CurrentProcessingInfo.mainViewId = null;
+			JobStack.stopProcessing();
+			return;
 		}
-		excludeIdentifiersPattern = "_ez_";
-		if (dialog._allowPreviews) getAll();
-		else getMainViews();
+
+		CurrentProcessingInfo.mainViewId = value.isPreview ? value.window.mainView.id : value.id;
+		CurrentProcessingInfo.workingViewId = value.isPreview ? value.fullId : value.id;
+		ConsoleWriter.writeMessageBlock("Selected image '" + CurrentProcessingInfo.workingViewId + "'");
+		GlobalDialog.onSelectedMainView.call(GlobalDialog, value, prevMainViewId);
+		JobStack.stopProcessing();
 	}
+	this.mainViewSelector.excludeIdentifiersPattern = "_ez_";
+	if (this.mainViewSelector.dialog._allowPreviews) this.mainViewSelector.getAll();
+	else this.mainViewSelector.getMainViews();
 
 	this.mainControl = new GroupBox(this);
-	with (this.mainControl) {
-		sizer = new SpacedVerticalSizer;
-		title = "Options";
-		enabled = false;
-		sizer.addStretch();
-	}
+	this.mainControl.sizer = new SpacedVerticalSizer;
+	this.mainControl.title = "Options";
+	this.mainControl.enabled = false;
+	this.mainControl.sizer.addStretch();
 
 	this.runEverythingButton = new PushButton(this);
-	with (this.runEverythingButton) {
-		text = "Run " + NAME;
-		toolTip = "Will apply " + NAME + " on image";
-		icon = dialog.scaledResource(":/icons/ok.png");
-		bindings = function() {
-			this.enabled = dialog.canRun();
-		}
-		enabled = true;
-		onClick = function () {
-			dialog.ok();
-		}
+	this.runEverythingButton.text = "Run " + NAME;
+	this.runEverythingButton.toolTip = "Will apply " + NAME + " on image";
+	this.runEverythingButton.icon = this.scaledResource(":/icons/ok.png");
+	this.runEverythingButton.bindings = function() {
+		this.enabled = GlobalDialog.canRun();
+	}
+	this.runEverythingButton.enabled = true;
+	this.runEverythingButton.onClick = function () {
+		GlobalDialog.ok();
 	}
 
 	this.runAndCloseGroupBox = new GroupBox(this);
-	with (this.runAndCloseGroupBox) {
-		title = "Execute and Exit";
-		sizer = new SpacedVerticalSizer;
-		enabled = false;
-		bindings = function() {
-			this.enabled = CurrentProcessingInfo.mainViewId != null;
-		}
-		sizer.addItem(this.runEverythingButton);
+	this.runAndCloseGroupBox.title = "Execute and Exit";
+	this.runAndCloseGroupBox.sizer = new SpacedVerticalSizer;
+	this.runAndCloseGroupBox.enabled = false;
+	this.runAndCloseGroupBox.bindings = function() {
+		this.enabled = CurrentProcessingInfo.mainViewId != null;
 	}
+	this.runAndCloseGroupBox.sizer.addItem(this.runEverythingButton);
 
 	this.onEvaluateButton = new PushButton(this);
-	with (this.onEvaluateButton) {
-		text = "Evaluate " + NAME + " Run";
-		icon = dialog.scaledResource(":/icons/process-ok.png");
-		bindings = function() {
-			this.enabled = dialog.canEvaluate();
-		}
-		onClick = function () {
-			startProcessing();
-			dialog.onEvaluate.call(this);
-			stopProcessing();
-		}
-		hide();
+	this.onEvaluateButton.text = "Evaluate " + NAME + " Run";
+	this.onEvaluateButton.icon = this.scaledResource(":/icons/process-ok.png");
+	this.onEvaluateButton.bindings = function() {
+		this.enabled = GlobalDialog.canEvaluate();
 	}
+	this.onEvaluateButton.onClick = function () {
+		JobStack.startProcessing();
+		GlobalDialog.onEvaluate.call(this);
+		JobStack.stopProcessing();
+	}
+	this.onEvaluateButton.hide();
 
 	this.tutorialButton = new PushButton(this);
-	with (this.tutorialButton) {
-		text = "How to use " + NAME;
-		icon = dialog.scaledResource(":/icons/help.png");
-		onClick = function () {
-			dialog.showHelpDialog();
-		}
+	this.tutorialButton.text = "How to use " + NAME;
+	this.tutorialButton.icon = this.scaledResource(":/icons/help.png");
+	this.tutorialButton.onClick = function () {
+		GlobalDialog.showHelpDialog();
 	}
 
 	this.controlSizer = new SpacedVerticalSizer(this);
-	with (this.controlSizer) {
-		addItem(this.infoBox);
-		addItem(this.tutorialButton);
-		addItem(this.mainViewSelector);
-		addItem(this.mainControl);
-		addItem(this.onEvaluateButton);
-		addStretch();
-		addItem(this.runAndCloseGroupBox);
-	}
+	this.controlSizer.addItem(this.infoBox);
+	this.controlSizer.addItem(this.tutorialButton);
+	this.controlSizer.addItem(this.mainViewSelector);
+	this.controlSizer.addItem(this.mainControl);
+	this.controlSizer.addItem(this.onEvaluateButton);
+	this.controlSizer.addStretch();
+	this.controlSizer.addItem(this.runAndCloseGroupBox);
 
 	this.control = new Frame(this);
-	with (this.control) {
-		setScaledMaxWidth(450);
-		setScaledMinWidth(450);
-		sizer = this.controlSizer;
-	}
+	this.control.setScaledMaxWidth(450);
+	this.control.setScaledMinWidth(450);
+	this.control.sizer = this.controlSizer;
 
 	this.tabBox = new TabBox(this);
 	this.tabBox.hide();
@@ -1372,19 +1354,32 @@ function myDialog(fullname, author) {
 	this.adjustToContents();
 
 	this.updateTimer = new Timer();
-	with(this.updateTimer) {
-		onTimeout = function() {
-			dialog.recalculateAll();
-		}
-		interval = 0.5;
-		periodic = true;
+	this.updateTimer.onTimeout = function() {
+		GlobalDialog.recalculateAll();
 	}
+	this.updateTimer.interval = 0.5;
+	this.updateTimer.periodic = true;
 
 	this.loadInitialView = function() {
-		dialog.mainViewSelector.currentView = ImageWindow.activeWindow.currentView;
-		dialog.mainViewSelector.onViewSelected(ImageWindow.activeWindow.currentView);
+		GlobalDialog.mainViewSelector.currentView = ImageWindow.activeWindow.currentView;
+		GlobalDialog.mainViewSelector.onViewSelected(ImageWindow.activeWindow.currentView);
 	}
+
+	this.replaceMainControl = function (uiElement) {
+		Console.writeln("replacing");
+		let index = this.controlSizer.indexOf(this.mainControl);
+		this.controlSizer.removeItem(this.mainControl);
+		this.mainControl.hide();
+		this.mainControl = uiElement;
+		this.controlSizer.insertItem(index, uiElement);
+		this.mainControl.bindings = function() {
+			Console.writeln('bla');
+			this.enabled = CurrentProcessingInfo.mainViewId != null;
+		}
+	}
+
 }
+EzDialog.prototype = new Dialog;
 
 // #endregion "Dialog"
 
@@ -1414,7 +1409,6 @@ function PreviewControl(parent, cloneImage, syncView) {
 
 	this.SetProcessingInfo = function (processingInfo, title) {
 		self.processingInfo = JSON.parse(JSON.stringify(processingInfo));
-		var propValue;
 
 		let infoGroupBox = new GroupBox(this);
 
@@ -1424,8 +1418,8 @@ function PreviewControl(parent, cloneImage, syncView) {
 		infoGroupBox.sizer.margin = 5;
 		infoGroupBox.setScaledFixedWidth(240);
 
-		for (var propName in self.processingInfo) {
-			propValue = self.processingInfo[propName]
+		for (let propName in self.processingInfo) {
+			let propValue = self.processingInfo[propName]
 
 			let label = new Label(self);
 			label.useRichText = true;
@@ -1437,12 +1431,10 @@ function PreviewControl(parent, cloneImage, syncView) {
 		infoGroupBox.adjustToContents();
 
 		self.applyGroupBox = new GroupBox(this);
-		with (self.applyGroupBox) {
-			title = "Apply This " + NAME + " Run";
-			sizer = new VerticalSizer;
-			sizer.spacing = 5;
-			sizer.margin = 5;
-		}
+		self.applyGroupBox.title = "Apply This " + NAME + " Run";
+		self.applyGroupBox.sizer = new VerticalSizer;
+		self.applyGroupBox.sizer.spacing = 5;
+		self.applyGroupBox.sizer.margin = 5;
 
 		let fullButton = new PushButton(this);
 		fullButton.text = "Run with these settings";
@@ -1450,7 +1442,7 @@ function PreviewControl(parent, cloneImage, syncView) {
 		fullButton.onClick = function () {
 			CurrentProcessingInfo = self.processingInfo;
 			CurrentProcessingInfo.runOnFullImage = true;
-			dialog.ok();
+			GlobalDialog.ok();
 		}
 
 		self.applyGroupBox.sizer.addItem(fullButton);
@@ -1528,8 +1520,8 @@ function PreviewControl(parent, cloneImage, syncView) {
 	}
 
 	this.onImageChange = function (showAltImage) {
-		var horizontalScrollPosition = self.scrollbox.horizontalScrollPosition;
-		var verticalScrollPosition = self.scrollbox.verticalScrollPosition;
+		let horizontalScrollPosition = self.scrollbox.horizontalScrollPosition;
+		let verticalScrollPosition = self.scrollbox.verticalScrollPosition;
 		let zoom = self.zoom;
 		if (showAltImage) {
 			self.SetImage(self.previewFrameAltWindow.currentView);
@@ -1542,13 +1534,11 @@ function PreviewControl(parent, cloneImage, syncView) {
 	}
 
 	this.alt_checkBox = new CheckBox(this);
-	with (this.alt_checkBox) {
-		foregroundColor = 0xffffffff;
-		text = "Alternative Version of image";
-		toolTip = 'Alternative image';
-		onCheck = function (checked) {
-			self.onImageChange.call(this, checked);
-		}
+	this.alt_checkBox.foregroundColor = 0xffffffff;
+	this.alt_checkBox.text = "Alternative Version of image";
+	this.alt_checkBox.toolTip = 'Alternative image';
+	this.alt_checkBox.onCheck = function (checked) {
+		self.onImageChange.call(this, checked);
 	}
 
 	this.forceRerender = function () {
@@ -1562,11 +1552,11 @@ function PreviewControl(parent, cloneImage, syncView) {
 	this.syncedCall = function (funcCall) {
 		if(!self.syncView) return;
 		self.isSyncing = true;
-		for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-			let control = dialog.tabBox.pageControlByIndex(i);
-			if (control == self || control == null) continue;
+		for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+			let control = GlobalDialog.tabBox.pageControlByIndex(i);
+			if (control === self || control == null) continue;
 			if (control.isSyncing != null && control.isSyncing) continue;
-			if (control.syncedViewName != self.syncedViewName) continue;
+			if (control.syncedViewName !== self.syncedViewName) continue;
 			if (control.syncView) {
 				control.syncView = false;
 				funcCall(control);
@@ -1580,7 +1570,7 @@ function PreviewControl(parent, cloneImage, syncView) {
 	this.UpdateZoom = function (newZoom, refPoint) {
 		self.syncedCall(function (control) { control.UpdateZoom.call(control, newZoom, refPoint); });
 		newZoom = Math.max(this.zoomOutLimit, Math.min(8, newZoom));
-		if (newZoom == this.zoom && this.scaledImage)
+		if (newZoom === this.zoom && this.scaledImage)
 			return;
 
 		if (refPoint == null)
@@ -1652,18 +1642,16 @@ function PreviewControl(parent, cloneImage, syncView) {
 	};
 
 	this.buttons_Box = new Frame(this);
-	with (this.buttons_Box) {
-		backgroundColor = 0xff0078d7;
-		sizer = new HorizontalSizer;
-		sizer.margin = 4;
-		sizer.spacing = 4;
-		sizer.addItem(this.zoomIn_Button);
-		sizer.addItem(this.zoomOut_Button);
-		sizer.addItem(this.zoom11_Button);
-		sizer.addItem(this.zoomOutMax_Button);
-		sizer.addStretch();
-		sizer.addItem(this.alt_checkBox);
-	}
+	this.buttons_Box.backgroundColor = 0xff0078d7;
+	this.buttons_Box.sizer = new HorizontalSizer;
+	this.buttons_Box.sizer.margin = 4;
+	this.buttons_Box.sizer.spacing = 4;
+	this.buttons_Box.sizer.addItem(this.zoomIn_Button);
+	this.buttons_Box.sizer.addItem(this.zoomOut_Button);
+	this.buttons_Box.sizer.addItem(this.zoom11_Button);
+	this.buttons_Box.sizer.addItem(this.zoomOutMax_Button);
+	this.buttons_Box.sizer.addStretch();
+	this.buttons_Box.sizer.addItem(this.alt_checkBox);
 
 	this.setScaledMinSize(450, 450);
 	this.zoom = 1;
@@ -1679,9 +1667,9 @@ function PreviewControl(parent, cloneImage, syncView) {
 
 	this.SetZoomOutLimit = function () {
 		self.syncedCall(function (control) { control.SetZoomOutLimit.call(control); });
-		var scaleX = Math.ceil(this.metadata.width / this.scrollbox.viewport.width);
-		var scaleY = Math.ceil(this.metadata.height / this.scrollbox.viewport.height);
-		var scale = Math.max(scaleX, scaleY);
+		let scaleX = Math.ceil(this.metadata.width / this.scrollbox.viewport.width);
+		let scaleY = Math.ceil(this.metadata.height / this.scrollbox.viewport.height);
+		let scale = Math.max(scaleX, scaleY);
 		this.zoomOutLimit = -scale + 2;
 	}
 
@@ -1703,21 +1691,21 @@ function PreviewControl(parent, cloneImage, syncView) {
 	};
 
 	this.scrollbox.viewport.onMouseWheel = function (x, y, delta, buttonState, modifiers) {
-		var preview = this.parent.parent;
+		let preview = this.parent.parent;
 		preview.UpdateZoom(preview.zoom + (delta > 0 ? -1 : 1), new Point(x, y));
 	}
 
 	this.scrollbox.viewport.onMousePress = function (x, y, button, buttonState, modifiers) {
-		var preview = this.parent.parent;
-		var p = preview.transform(x, y, preview);
+		let preview = this.parent.parent;
+		let p = preview.transform(x, y, preview);
 		if (preview.onCustomMouseDown) {
 			preview.onCustomMouseDown.call(preview, p.x, p.y, button, buttonState, modifiers)
 		}
 	}
 
 	this.scrollbox.viewport.onMouseMove = function (x, y, buttonState, modifiers) {
-		var preview = this.parent.parent;
-		var p = preview.transform(x, y, preview);
+		let preview = this.parent.parent;
+		let p = preview.transform(x, y, preview);
 		preview.Xval_Label.text = p.x.toString();
 		preview.Yval_Label.text = p.y.toString();
 
@@ -1727,16 +1715,16 @@ function PreviewControl(parent, cloneImage, syncView) {
 	}
 
 	this.scrollbox.viewport.onMouseRelease = function (x, y, button, buttonState, modifiers) {
-		var preview = this.parent.parent;
+		let preview = this.parent.parent;
 
-		var p = preview.transform(x, y, preview);
+		let p = preview.transform(x, y, preview);
 		if (preview.onCustomMouseUp) {
 			preview.onCustomMouseUp.call(preview, p.x, p.y, button, buttonState, modifiers)
 		}
 	}
 
 	this.scrollbox.viewport.onResize = function (wNew, hNew, wOld, hOld) {
-		var preview = this.parent.parent;
+		let preview = this.parent.parent;
 		if (preview.metadata && preview.scaledImage) {
 			this.parent.maxHorizontalScrollPosition = Math.max(0, preview.scaledImage.width - wNew);
 			this.parent.maxVerticalScrollPosition = Math.max(0, preview.scaledImage.height - hNew);
@@ -1747,12 +1735,12 @@ function PreviewControl(parent, cloneImage, syncView) {
 	}
 
 	this.scrollbox.viewport.onPaint = function (x0, y0, x1, y1) {
-		var preview = this.parent.parent;
-		var graphics = new VectorGraphics(this);
+		let preview = this.parent.parent;
+		let graphics = new VectorGraphics(this);
 
 		graphics.fillRect(x0, y0, x1, y1, new Brush(0xff202020));
-		var offsetX = this.parent.maxHorizontalScrollPosition > 0 ? -this.parent.horizontalScrollPosition : (this.width - preview.scaledImage.width) / 2;
-		var offsetY = this.parent.maxVerticalScrollPosition > 0 ? -this.parent.verticalScrollPosition : (this.height - preview.scaledImage.height) / 2;
+		let offsetX = this.parent.maxHorizontalScrollPosition > 0 ? -this.parent.horizontalScrollPosition : (this.width - preview.scaledImage.width) / 2;
+		let offsetY = this.parent.maxVerticalScrollPosition > 0 ? -this.parent.verticalScrollPosition : (this.height - preview.scaledImage.height) / 2;
 		graphics.translateTransformation(offsetX, offsetY);
 		if (preview.image)
 			graphics.drawBitmap(0, 0, preview.scaledImage);
@@ -1771,21 +1759,21 @@ function PreviewControl(parent, cloneImage, syncView) {
 	}
 
 	this.transform = function (x, y, preview) {
-		var scrollbox = preview.scrollbox;
-		var ox = 0;
-		var oy = 0;
+		let scrollbox = preview.scrollbox;
+		let ox = 0;
+		let oy = 0;
 		ox = scrollbox.maxHorizontalScrollPosition > 0 ? -scrollbox.horizontalScrollPosition : (scrollbox.viewport.width - preview.scaledImage.width) / 2;
 		oy = scrollbox.maxVerticalScrollPosition > 0 ? -scrollbox.verticalScrollPosition : (scrollbox.viewport.height - preview.scaledImage.height) / 2;
-		var coordPx = new Point((x - ox) / preview.scale, (y - oy) / preview.scale);
+		let coordPx = new Point((x - ox) / preview.scale, (y - oy) / preview.scale);
 		return new Point(coordPx.x, coordPx.y);
 	}
 
 	this.center = function () {
-		var preview = this;
-		var scrollbox = preview.scrollbox;
-		var x = scrollbox.viewport.width / 2;
-		var y = scrollbox.viewport.height / 2;
-		var p = this.transform(x, y, preview);
+		let preview = this;
+		let scrollbox = preview.scrollbox;
+		let x = scrollbox.viewport.width / 2;
+		let y = scrollbox.viewport.height / 2;
+		let p = this.transform(x, y, preview);
 		return p;
 	}
 
@@ -1833,72 +1821,76 @@ function PreviewControl(parent, cloneImage, syncView) {
 	this.sizer.addItem(this.coords_Frame);
 	// #endregion 
 }
+PreviewControl.prototype = new Control;
 
 // #endregion PreviewControl
 
 // #region Main
 function checkForOverrides() {
-	if(typeof this.NAME === "undefined") console.criticalln("NAME:string must be declared in main script.");
-	if(typeof this.VERSION === "undefined") console.criticalln("NAME:string must be declared in main script.");
-	if(typeof this.AUTHOR !== "string") console.criticalln("NAME:string must be declared in main script.");
-	if(typeof this.onInit !== "function") console.criticalln("onInit():void must be declared in main script.");
-	if(typeof this.onExit !== "function") console.criticalln("onExit():void must be declared in main script.");
-	if(typeof this.generateProcessingInfo !== "function") console.criticalln("generateProcessingInfo():ProcessingInfo must be declared in main script.");
-	if(typeof this.saveSettings !== "function") console.criticalln("saveSettings():void must be declared in main script.");
-	if(typeof this.execute !== "function") console.criticalln("execute(window):void must be declared in main script.");
-	if(typeof this.customizeDialog !== "function") console.criticalln("customizeDialog():void must be declared in main script.");
+	if(typeof this.NAME === "undefined") Console.criticalln("NAME:string must be declared in main script.");
+	if(typeof this.VERSION === "undefined") Console.criticalln("NAME:string must be declared in main script.");
+	if(typeof this.AUTHOR !== "string") Console.criticalln("NAME:string must be declared in main script.");
+	if(typeof this.onInit !== "function") Console.criticalln("onInit():void must be declared in main script.");
+	if(typeof this.onExit !== "function") Console.criticalln("onExit():void must be declared in main script.");
+	if(typeof this.generateProcessingInfo !== "function") Console.criticalln("generateProcessingInfo():ProcessingInfo must be declared in main script.");
+	if(typeof this.saveSettings !== "function") Console.criticalln("saveSettings():void must be declared in main script.");
+	if(typeof this.execute !== "function") Console.criticalln("execute(window):void must be declared in main script.");
+	if(typeof this.customizeDialog !== "function") Console.criticalln("customizeDialog():void must be declared in main script.");
 }
 
 function main() {
 	checkForOverrides();
 	onInit();
+
 	CurrentProcessingInfo = generateProcessingInfo();
 
-	dialog = new myDialog(FULLNAME, AUTHOR);
-	customizeDialog(dialog);
-	dialog.onExecute = function() {
-		dialog.recalculateAll();
-		dialog.updateTimer.start();
-		dialog.loadInitialView();
+	GlobalDialog = new EzDialog(FullName, AUTHOR);
+	customizeDialog(GlobalDialog);
+	GlobalDialog.onExecute = function() {
+		GlobalDialog.recalculateAll();
+		GlobalDialog.updateTimer.start();
+		GlobalDialog.loadInitialView();
 	}
 
-	if(showWarning) {
-		dialog.showWarningDialog(WARNING, FULLNAME + " Disclaimer");
-		writeWarningBlock(WARNING);
+	if(ShowWarning) {
+		GlobalDialog.showWarningDialog(WarningMessage, FullName + " Disclaimer");
+		ConsoleWriter.writeWarningBlock(WarningMessage);
 	}
 
 	let showTutorial = readFromSettingsOrDefault(NAME + ".ShowTutorial", 0, true);
 	if (showTutorial) {
-		dialog.showHelpDialog();
+		GlobalDialog.showHelpDialog();
 		Settings.write(NAME + ".ShowTutorial", 0, false);
 	}
 
-	writeMessageStart("Reactor online, sensors online, all systems nominal.");
-	writeMessageEnd("Welcome to " + NAME + ", Commander.");
+	ConsoleWriter.writeMessageStart("Reactor online, sensors online, all systems nominal.");
+	ConsoleWriter.writeMessageEnd("Welcome to " + NAME + ", Commander.");
 
 	jsAbortable = true;
 
-	dialog.execute();
-	dialog.updateTimer.stop();
+	GlobalDialog.execute();
+	GlobalDialog.updateTimer.stop();
 
-	if (dialog.result == 1) {
+	if (GlobalDialog.result === 1) {
 		saveSettings();
 		let mainWindow = null;
 		if(CurrentProcessingInfo != null && CurrentProcessingInfo.mainViewId != null) mainWindow = View.viewById(CurrentProcessingInfo.mainViewId).window;
 		execute(mainWindow, true, true);
 	}
 
-	dialog.onExit();
+	GlobalDialog.onExit();
 
-	for (let i = 0;i<dialog.tabBox.numberOfPages;i++) {
-		dialog.tabBox.pageControlByIndex(i).dispose();
+	for (let i = 0; i<GlobalDialog.tabBox.numberOfPages; i++) {
+		GlobalDialog.tabBox.pageControlByIndex(i).dispose();
 	}
 
 	onExit();
 
-	writeMessageBlock("Engine powering down. Thank you for using " + NAME + ". To stay up to date with the EZ Processing Suite, feature requests and issue reports join the Discord: https://discord.gg/zw8vwZF");
+	ConsoleWriter.writeMessageBlock("Engine powering down. Thank you for using " + NAME + ". To stay up to date with the EZ Processing Suite, feature requests and issue reports join the Discord: https://discord.gg/zw8vwZF");
 
 	// #endregion Main
+	CurrentProcessingInfo.reset();
+	GlobalDialog.dispose();
 	delete Array.prototype.removeItem;
 	delete Object.prototype.printPropertiesDebug;
 }

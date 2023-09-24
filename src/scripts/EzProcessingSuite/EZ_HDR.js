@@ -24,20 +24,20 @@ function generateProcessingInfo() {
 }
 
 function execute(window, bringToFront = true, runOnMain = false) {
-    startProcessing();
-    writeMessageStart("Running EZ HDR on " + window.mainView.id);
+    JobStack.startProcessing();
+    ConsoleWriter.writeMessageStart("Running EZ HDR on " + window.mainView.id);
 
     CurrentProcessingInfo.rangeMaskId = createBackgroundMask(View.viewById(window.mainView.id),
         "_ez_HDR_" + window.mainView.id + "_bg", false);
 
     let hdrClone = cloneView(window.mainView, "_ez_HDR_" + window.mainView.id + "_HDR", true, false);
-    writeMessageBlock("Applying HDR to " + hdrClone.window.mainView.id);
+    ConsoleWriter.writeMessageBlock("Applying HDR to " + hdrClone.window.mainView.id);
     let hdr = new HDRMultiscaleTransform();
     hdr.numberOfLayers = CurrentProcessingInfo.hdrLayers;
     hdr.executeOn(hdrClone);
     window.removeMask();
     window.setMask(View.viewById(CurrentProcessingInfo.rangeMaskId).window, true);
-    writeMessageBlock("Blending HDR image with " + window.mainView.id);
+    ConsoleWriter.writeMessageBlock("Blending HDR image with " + window.mainView.id);
     doPixelMath(window.mainView, 
         "(1-{0})*{1}+{0}*{2}".format(CurrentProcessingInfo.hdrAmount, window.mainView.id, hdrClone.window.mainView.id), true);
     window.removeMask();
@@ -46,8 +46,8 @@ function execute(window, bringToFront = true, runOnMain = false) {
     } else {
         hdrClone.window.iconize();
     }
-    stopProcessing();
-    writeMessageEnd("EZ HDR run complete");
+    JobStack.stopProcessing();
+    ConsoleWriter.writeMessageEnd("EZ HDR run complete");
     return window.mainView;
 }
 
@@ -60,32 +60,32 @@ function onInit() {
 }
 
 function customizeDialog() {
-    // customize dialog appearance and everything
-    dialog.infoBox.text = "<b>EZ HDR</b>: This script attempts to bring back details from bright galaxy and nebula cores.";
-    dialog.tutorialPrerequisites = ["Non-Linear image"];
-    dialog.tutorialSteps = [
+    // customize GlobalDialog appearance and everything
+    GlobalDialog.infoBox.text = "<b>EZ HDR</b>: This script attempts to bring back details from bright galaxy and nebula cores.";
+    GlobalDialog.tutorialPrerequisites = ["Non-Linear image"];
+    GlobalDialog.tutorialSteps = [
         "Set blend strength, this sets how much of the HDR image is blended into the image",
         "Set the amount of layers that you want to be affected by the HDR process, the smaller the finer the HDR will be"
     ]
 
-    // custom binding for the dialog only, use .bindings for everything else!
-    dialog.customBindings = function() { }
+    // custom binding for the GlobalDialog only, use .bindings for everything else!
+    GlobalDialog.customBindings = function() { }
 
     // uncomment if evaluate button should be shown
-    // dialog.onEvaluateButton.show()
+    // GlobalDialog.onEvaluateButton.show()
 
-    dialog.onExit = function() { 
-        // called on exiting the dialog
+    GlobalDialog.onExit = function() {
+        // called on exiting the GlobalDialog
     }
 
     // uncomment if previews should be allowed to be chosen
-    // dialog.allowPreviews();
+    // GlobalDialog.allowPreviews();
 
-    dialog.onSelectedMainView = function(view, prevMainViewId) {
+    GlobalDialog.onSelectedMainView = function(view, prevMainViewId) {
         if(view.computeOrFetchProperty("Median").at(0) < 0.1) {
-            let result = dialog.showWarningDialog("Median lower 0.1. Unlikely this is a linear image. This script only works on non-linear images.", "Failed to load", "Continue anyway", true);
+            let result = GlobalDialog.showWarningDialog("Median lower 0.1. Unlikely this is a linear image. This script only works on non-linear images.", "Failed to load", "Continue anyway", true);
             if(result != 1) {
-                dialog.mainViewSelector.remove(view);
+                GlobalDialog.mainViewSelector.remove(view);
                 CurrentProcessingInfo.mainViewId = null;
                 return;
             }
@@ -97,30 +97,30 @@ function customizeDialog() {
             View.viewById(CurrentProcessingInfo.rangeMaskId).window.forceClose();
         }
 
-        for (let i = dialog.tabBox.numberOfPages - 1; i >= 0; i--) {
-            dialog.tabBox.pageControlByIndex(i).dispose();
-            dialog.tabBox.removePage(i);
+        for (let i = GlobalDialog.tabBox.numberOfPages - 1; i >= 0; i--) {
+            GlobalDialog.tabBox.pageControlByIndex(i).dispose();
+            GlobalDialog.tabBox.removePage(i);
         }
 
         /* // not used for first iteration
-        dialog.addMainControl(CurrentProcessingInfo.workingViewId);
-        dialog.tabBox.show();
+        GlobalDialog.addMainControl(CurrentProcessingInfo.workingViewId);
+        GlobalDialog.tabBox.show();
         if (prevMainViewId == null) 
         {
-            dialog.width *= 3;
-            dialog.setScaledMinWidth(dialog.width);
+            GlobalDialog.width *= 3;
+            GlobalDialog.setScaledMinWidth(GlobalDialog.width);
         }
         */
     }
 
     /* // not used for first iteration
-    dialog.addMainControl = function(viewId) {
-        let viewControl = new PreviewControl(dialog, true, true);
+    GlobalDialog.addMainControl = function(viewId) {
+        let viewControl = new PreviewControl(GlobalDialog, true, true);
         viewControl.STF = DEFAULT_STF;
         viewControl.SetView(View.viewById(viewId), false);
 
         viewControl.swap = function () {
-            dialog.tabBox.currentPageIndex = dialog.tabBox.numberOfPages - 1;
+            GlobalDialog.tabBox.currentPageIndex = GlobalDialog.tabBox.numberOfPages - 1;
         }
         let swapToLatestButton = new PushButton(viewControl);
         swapToLatestButton.text = "Change Tab to Latest Run";
@@ -128,40 +128,40 @@ function customizeDialog() {
             viewControl.swap.call(viewControl);
         }
         swapToLatestButton.bindings = function () {
-            swapToLatestButton.text = "Change Tab to " + dialog.tabBox.pageLabel(dialog.tabBox.numberOfPages - 1);
+            swapToLatestButton.text = "Change Tab to " + GlobalDialog.tabBox.pageLabel(GlobalDialog.tabBox.numberOfPages - 1);
         }
 
         viewControl.infoFrame.sizer.insertItem(0, swapToLatestButton);
 
-        dialog.tabBox.insertPage(0, viewControl, viewId);
+        GlobalDialog.tabBox.insertPage(0, viewControl, viewId);
     } */
 
-    dialog.onEmptyMainView = function() {
+    GlobalDialog.onEmptyMainView = function() {
         /* // not used for first iteration
-        for (let i = dialog.tabBox.numberOfPages - 1; i >= 0; i--) {
-            dialog.tabBox.pageControlByIndex(i).dispose();
-            dialog.tabBox.removePage(i);
+        for (let i = GlobalDialog.tabBox.numberOfPages - 1; i >= 0; i--) {
+            GlobalDialog.tabBox.pageControlByIndex(i).dispose();
+            GlobalDialog.tabBox.removePage(i);
         }
 
-        dialog.tabBox.hide();
-        dialog.adjustToContents();
-        dialog.setScaledMinWidth(dialog.width);
+        GlobalDialog.tabBox.hide();
+        GlobalDialog.adjustToContents();
+        GlobalDialog.setScaledMinWidth(GlobalDialog.width);
         */
     }
 
-    dialog.canRun = function() {
+    GlobalDialog.canRun = function() {
         return CurrentProcessingInfo.mainViewId != null;
     }
 
-    dialog.canEvaluate = function() {
+    GlobalDialog.canEvaluate = function() {
         return CurrentProcessingInfo.mainViewId != null;
     }
 
-	dialog.onEvaluate = function () {
+	GlobalDialog.onEvaluate = function () {
     }
     
-    dialog.amountSlider = new NumericControl(dialog);
-    with (dialog.amountSlider) {
+    GlobalDialog.amountSlider = new NumericControl(GlobalDialog);
+    with (GlobalDialog.amountSlider) {
         label.text = "HDR Blend";
 		label.minWidth = 100;
 		setRange(0.01, 0.4);
@@ -177,8 +177,8 @@ function customizeDialog() {
 		}
     }
 
-    dialog.layerSlider = new NumericControl(dialog);
-    with (dialog.layerSlider) {
+    GlobalDialog.layerSlider = new NumericControl(GlobalDialog);
+    with (GlobalDialog.layerSlider) {
         label.text = "HDR Layers";
 		label.minWidth = 100;
 		setRange(3, 7);
@@ -194,29 +194,29 @@ function customizeDialog() {
 		}
     }
 
-    dialog.resetButton = new PushButton(dialog);
-	with(dialog.resetButton) {
+    GlobalDialog.resetButton = new PushButton(GlobalDialog);
+	with(GlobalDialog.resetButton) {
 		text = "Reset EZ HDR Settings";
 		toolTip = "Reset EZ HDR to default settings";
-		icon = dialog.scaledResource(":/icons/debug-restart.png");
+		icon = GlobalDialog.scaledResource(":/icons/debug-restart.png");
 		onClick = function () {
 			CurrentProcessingInfo.hdrLayers = 5;
 			CurrentProcessingInfo.hdrAmount = 0.3;
 		}
 	}
 
-    dialog.mainControl.sizer.addItem(dialog.amountSlider);
-    dialog.mainControl.sizer.addItem(dialog.layerSlider);
-    dialog.mainControl.sizer.addItem(dialog.resetButton);
-    dialog.mainControl.bindings = function() {
-        this.enabled = dialog.canRun();
+    GlobalDialog.mainControl.sizer.addItem(GlobalDialog.amountSlider);
+    GlobalDialog.mainControl.sizer.addItem(GlobalDialog.layerSlider);
+    GlobalDialog.mainControl.sizer.addItem(GlobalDialog.resetButton);
+    GlobalDialog.mainControl.bindings = function() {
+        this.enabled = GlobalDialog.canRun();
     }
 
-    dialog.setScaledMaxWidth(300);
-    dialog.control.setScaledMaxWidth(300);
-    dialog.setScaledMinWidth(300);
-    dialog.control.setScaledMinWidth(300);
-    dialog.adjustToContents();
+    GlobalDialog.setScaledMaxWidth(300);
+    GlobalDialog.control.setScaledMaxWidth(300);
+    GlobalDialog.setScaledMinWidth(300);
+    GlobalDialog.control.setScaledMinWidth(300);
+    GlobalDialog.adjustToContents();
 }
 
 main();

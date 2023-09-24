@@ -52,12 +52,31 @@ var AUTHOR = "S. Dimant";
 
 #include "EZ_Common.js"
 
+// #region utilities
+
+function waitForS(seconds) {
+    let sleepT = 0;
+    while (sleepT < seconds) {
+        let sleepS = 0.1;
+        sleep(sleepS);
+        processEvents();
+        sleepT += sleepS;
+    }
+}
+
+function getValueOrDefault(value, defaultValue) {
+    if(value == null) return defaultValue;
+    return value;
+}
+
+// #endregion
+
 var stacks = [];
 
 var fileFilterDict = {};
 
 function onInit() {
-    showWarning = false;
+    ShowWarning = false;
     stacks = [];
 }
 
@@ -76,7 +95,7 @@ Stack.prototype = new Object;
 Stack.prototype.toString = function () {
     for (var propName in this) {
         propValue = this[propName]
-        console.writeln(this.constructor.name + "." + propName + " = " + propValue);
+        Console.writeln(this.constructor.name + "." + propName + " = " + propValue);
     }
 }
 
@@ -132,11 +151,11 @@ Stack.prototype.setDarkPath = function(path) {
 
     let fileInfo = new FileInfo(path);
     if(!fileInfo.isFile) {
-        writeWarningBlock("Could not load DARK on " + path + ", file does not exist");
+        ConsoleWriter.writeWarningBlock("Could not load DARK on " + path + ", file does not exist");
         return;
     }
 
-    writeMessageBlock("Loading DARK " + path);
+    ConsoleWriter.writeMessageBlock("Loading DARK " + path);
     this.darkPath = path;
     this.storeProperty(DarkProperty, this.darkPath);
 }
@@ -151,11 +170,11 @@ Stack.prototype.setBiasPath = function(path) {
 
     let fileInfo = new FileInfo(path);
     if(!fileInfo.isFile) {
-        writeWarningBlock("Could not load BIAS on " + path + ", file does not exist");
+        ConsoleWriter.writeWarningBlock("Could not load BIAS on " + path + ", file does not exist");
         return;
     }
 
-    writeMessageBlock("Loading BIAS " + path);
+    ConsoleWriter.writeMessageBlock("Loading BIAS " + path);
     this.biasPath = path;
     this.storeProperty(BiasProperty, this.biasPath);
 }
@@ -170,11 +189,11 @@ Stack.prototype.setFlatPath = function(path) {
 
     let fileInfo = new FileInfo(path);
     if(!fileInfo.isFile) {
-        writeWarningBlock("Could not load FLAT on " + path + ", file does not exist");
+        ConsoleWriter.writeWarningBlock("Could not load FLAT on " + path + ", file does not exist");
         return;
     }
 
-    writeMessageBlock("Loading FLAT " + path);
+    ConsoleWriter.writeMessageBlock("Loading FLAT " + path);
     this.flatPath = path;
     this.storeProperty(FlatProperty, this.flatPath);
 }
@@ -313,9 +332,9 @@ function Stack(parent, viewId = null) {
 // #endregion Stack
 
 function execute() {
-    writeMessageBlock("Exporting Live Stack Image");
-    for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-        dialog.tabBox.pageControlByIndex(i).stack.export = true;
+    ConsoleWriter.writeMessageBlock("Exporting Live Stack Image");
+    for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+        GlobalDialog.tabBox.pageControlByIndex(i).stack.export = true;
     }
 }
 
@@ -330,9 +349,9 @@ function doCalibrate(view, stack) {
         return view.window;
     }
 
-    startProcessing();
+    JobStack.startProcessing();
     let expTime = view.propertyValue("Instrument:ExposureTime");
-    writeMessageStart("Calibrating " + view.id);
+    ConsoleWriter.writeMessageStart("Calibrating " + view.id);
     let biasImage = null;
     let darkImage = null;
     let flatImage = null;
@@ -344,13 +363,13 @@ function doCalibrate(view, stack) {
     if (stack.biasPath != null) {
         biasImage = readImage(stack.biasPath, true);
         bias = biasImage.mainView.id;
-        writeMessageBlock("Calibrating with BIAS " + bias, false, true);
+        ConsoleWriter.writeMessageBlock("Calibrating with BIAS " + bias, false, true);
     }
 
     if (stack.darkPath != null) {
         darkImage = readImage(stack.darkPath);
         dark = darkImage.mainView.id;
-        writeMessageBlock("Calibrating with DARK " + dark, false, true);
+        ConsoleWriter.writeMessageBlock("Calibrating with DARK " + dark, false, true);
         // calculate scaling
         if (stack.optimizeDark && stack.darkExposureTime != 0) {
             darkScaling = expTime / stack.darkExposureTime;
@@ -360,10 +379,10 @@ function doCalibrate(view, stack) {
     if (stack.flatPath != null) {
         flatImage = readImage(stack.flatPath);
         flat = flatImage.mainView.id;
-        writeMessageBlock("Calibrating with FLAT " + flat, false, true);
+        ConsoleWriter.writeMessageBlock("Calibrating with FLAT " + flat, false, true);
     }
 
-    //console.writeln("(({0}-{1})-({2}*{3}))/{4}".format(view.id, bias, dark, darkScaling, flat));
+    //Console.writeln("(({0}-{1})-({2}*{3}))/{4}".format(view.id, bias, dark, darkScaling, flat));
     doPixelMath(view, "((({0}-{1})-({2}*{3}))/{4})*{5}".format(view.id, bias, dark, darkScaling, flat, (flat == 1 ? "1" : "mean(" + flat + ")")))
     
     if(biasImage != null) {
@@ -376,8 +395,8 @@ function doCalibrate(view, stack) {
         flatImage.forceClose();
     }
 
-    writeMessageEnd("Done calibration");
-    stopProcessing();
+    ConsoleWriter.writeMessageEnd("Done calibration");
+    JobStack.stopProcessing();
     return view.window;
 }
 
@@ -473,8 +492,8 @@ function doImageCalibrate(stack, newFiles) {
 }
 
 function evalNoiseOnStack(stack) {
-    startProcessing();
-    writeMessageStart("Evaluating noise");
+    JobStack.startProcessing();
+    ConsoleWriter.writeMessageStart("Evaluating noise");
     processEvents();
     let stackMainView = stack.getStackView();
 
@@ -502,8 +521,8 @@ function evalNoiseOnStack(stack) {
     }
 
     stack.storeProperty(NoiseEvalProperty, currentNoiseEval);
-    writeMessageEnd();
-    stopProcessing();
+    ConsoleWriter.writeMessageEnd();
+    JobStack.stopProcessing();
 }
 
 function doDebayerAndDownsample(view, stack, fullFile) {
@@ -511,8 +530,8 @@ function doDebayerAndDownsample(view, stack, fullFile) {
         return view;
     }
 
-    startProcessing();
-    writeMessageStart("Processing image");
+    JobStack.startProcessing();
+    ConsoleWriter.writeMessageStart("Processing image");
     if (stack.isCFA) {
         doImageDebayer(view, stack, fullFile);
         if(stack.saveDebayered && stack.saveCalibratedFile) {
@@ -528,7 +547,7 @@ function doDebayerAndDownsample(view, stack, fullFile) {
     }
 
     if(stack.downscaleImages) {
-        writeMessageBlock("Downscaling image");
+        ConsoleWriter.writeMessageBlock("Downscaling image");
         var downSample = new IntegerResample;
 		downSample.zoomFactor = stack.downscaleImagesAmount * -1;
 		downSample.downsamplingMode = IntegerResample.prototype.Average;
@@ -540,8 +559,8 @@ function doDebayerAndDownsample(view, stack, fullFile) {
         view.storeProperty(DownscaleProperty, true);
         downSample.executeOn(view);
     }
-    writeMessageEnd("Done processing");
-    stopProcessing();
+    ConsoleWriter.writeMessageEnd("Done processing");
+    JobStack.stopProcessing();
     return view;
 }
 
@@ -556,7 +575,7 @@ function doImageDebayer(view, stack, fullFile) {
         files.begin(debayeredFile);
 
         if(files.isFile) {
-            writeMessageBlock("Loading previously debayered image");
+            ConsoleWriter.writeMessageBlock("Loading previously debayered image");
             return;
         }
 
@@ -564,10 +583,10 @@ function doImageDebayer(view, stack, fullFile) {
         d.targetItems = [[true, fullFile]];
         d.outputPrefix = "ezd_";
         d.outputPostfix = "";
-        writeMessageBlock("Debayering and saving image");
+        ConsoleWriter.writeMessageBlock("Debayering and saving image");
         d.executeGlobal();
     } else {
-        writeMessageBlock("Debayering image");
+        ConsoleWriter.writeMessageBlock("Debayering image");
         d.executeOn(view);
     }
 }
@@ -578,8 +597,8 @@ fileWatcher.onDirectoryChanged = function (dir, initial = false) {
     waitForS(1);
     // find all fitting stacks for the directory
     let allFittingStacks = [];
-    for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-        let tempStack = dialog.tabBox.pageControlByIndex(i).stack;
+    for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+        let tempStack = GlobalDialog.tabBox.pageControlByIndex(i).stack;
         if (tempStack.pathToWatch == dir && tempStack.watchingFolder) {
             allFittingStacks.push(tempStack);
         }
@@ -619,10 +638,10 @@ fileWatcher.onDirectoryChanged = function (dir, initial = false) {
     if(newFiles.length == 0) return;
 
     // check if any stacks are currently processing
-    for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-        let tempStack = dialog.tabBox.pageControlByIndex(i).stack;
+    for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+        let tempStack = GlobalDialog.tabBox.pageControlByIndex(i).stack;
         if(tempStack.isProcessingFiles) {
-            writeWarningBlock("Detected a new file but another stack is currently integrating, aborting");
+            ConsoleWriter.writeWarningBlock("Detected a new file but another stack is currently integrating, aborting");
             return;
         }
     }
@@ -635,13 +654,13 @@ fileWatcher.onDirectoryChanged = function (dir, initial = false) {
     if(!initial) {
         // wait for settletime as defined
         let settleTime = readFromSettingsOrDefault("EZLiveStack.SettleTime", 1, 10);
-        writeMessageStart("Detected file changes in " + dir + ", settling " + settleTime + "s");
+        ConsoleWriter.writeMessageStart("Detected file changes in " + dir + ", settling " + settleTime + "s");
         waitForS(settleTime);
     }
 
     newFiles = [];
     // let's just search again and assign after the settletime...
-    writeMessageBlock("Determining stacks for new files + filter");
+    ConsoleWriter.writeMessageBlock("Determining stacks for new files + filter");
     files.begin(dir + "/*");
     do {
         if (files.isDirectory) { continue; }
@@ -680,12 +699,12 @@ fileWatcher.onDirectoryChanged = function (dir, initial = false) {
         }
     }
 
-    writeMessageEnd();
+    ConsoleWriter.writeMessageEnd();
 }
 
 function getFilterFromFile(path) {
     if(!(path in fileFilterDict)) {
-        console.noteln(path);
+        Console.noteln(path);
         let newWindow = readImage(path);
         let newFilter = newWindow.mainView.readPropertyOrKeyword("Instruments:Filter:Name", "FILTER");
         fileFilterDict[path] = newFilter;
@@ -700,16 +719,16 @@ function stopWatchingFolder(stack) {
     if (stack.watchingFolder && stack.pathToWatch != "") {
         fileWatcher.removePath(stack.pathToWatch);
         stack.watchingFolder = false;
-        writeMessageBlock("File watcher stopped monitoring " + stack.pathToWatch);
+        ConsoleWriter.writeMessageBlock("File watcher stopped monitoring " + stack.pathToWatch);
     }
 }
 
 function startWatchingFolder(stack) {
     stack.watchingFolder = true;
-    writeMessageStart("Initializing File Watcher on " + stack.pathToWatch);
+    ConsoleWriter.writeMessageStart("Initializing File Watcher on " + stack.pathToWatch);
 
     if (!stack.calibrated) {
-        startProcessing();
+        JobStack.startProcessing();
         let newView = null;
         let fullFile = stack.pathToWatch + "/" + CalibratedFilesPrefix + stack.processedFiles[0].replace(stack.fileExtension, ".xisf");
         // handle calibrated and non calibrated files
@@ -737,30 +756,30 @@ function startWatchingFolder(stack) {
             evalNoiseOnStack(stack);
         }
 
-        stopProcessing();
+        JobStack.stopProcessing();
     }
 
     fileWatcher.addPath(stack.pathToWatch);
     fileWatcher.onDirectoryChanged(stack.pathToWatch, true);
-    writeMessageEnd("File Watcher watching " + stack.pathToWatch);
+    ConsoleWriter.writeMessageEnd("File Watcher watching " + stack.pathToWatch);
     stack.status = "Monitoring";
     stack.isProcessingFiles = false;
 }
 
 function integrateFiles(stack) {
-    startProcessing();
+    JobStack.startProcessing();
     stack.status = "Integrating";
-    writeMessageStart("Integrating files");
+    ConsoleWriter.writeMessageStart("Integrating files");
 
     // calibrate when saving
     if(stack.saveCalibratedFile) {
-        writeMessageBlock("Calibrating all files");
+        ConsoleWriter.writeMessageBlock("Calibrating all files");
         stack.status = "Calibrating and saving";
         processEvents();
         doImageCalibrate(stack, stack.newFiles);
     }
 
-    writeMessageBlock("Integrating into stack");
+    ConsoleWriter.writeMessageBlock("Integrating into stack");
 
     let i = 0;
     while (stack.newFiles.length > 0) {
@@ -785,7 +804,7 @@ function integrateFiles(stack) {
             stack.processedFiles.removeItem(newFile);
             stack.newFiles.removeItem(newFile);
             stack.ignoredFiles.push(newFile);
-            writeWarningBlock("Failed to parse file into image. Ignoring file.");
+            ConsoleWriter.writeWarningBlock("Failed to parse file into image. Ignoring file.");
             continue;
         }
 
@@ -811,7 +830,7 @@ function integrateFiles(stack) {
             newWindow.forceClose();
             stack.processedFiles.removeItem(newFile);
             stack.ignoredFiles.push(newFile);
-            writeWarningBlock("Could not align image, continuing...");
+            ConsoleWriter.writeWarningBlock("Could not align image, continuing...");
             continue;
         }
 
@@ -840,31 +859,31 @@ function integrateFiles(stack) {
         }
     }
 
-    writeMessageEnd("Integration complete.");
+    ConsoleWriter.writeMessageEnd("Integration complete.");
     stack.isProcessingFiles = false;
     stack.newFiles = [];
     stack.status = "Monitoring";
     gc();
-    stopProcessing();
+    JobStack.stopProcessing();
 }
 
 function colorStack(stack, viewR, viewG, viewB, doScnr = true) {
-    startProcessing();
+    JobStack.startProcessing();
     // star align everything to R
     if (!doStarAlign(viewR, viewG)) {
-        writeWarningBlock("Could not align G image, aborting");
+        ConsoleWriter.writeWarningBlock("Could not align G image, aborting");
         stack.isProcessingFiles = false;
-        stopProcessing();
+        JobStack.stopProcessing();
         throw new Error("Could not align G channel");
     }
 
     let viewGAligned = ImageWindow.activeWindow.mainView;
 
     if (!doStarAlign(viewR, viewB)) {
-        writeWarningBlock("Could not align B image, aborting");
+        ConsoleWriter.writeWarningBlock("Could not align B image, aborting");
         viewGAligned.window.forceClose();
         stack.isProcessingFiles = false;
-        stopProcessing();
+        JobStack.stopProcessing();
         throw new Error("Could not align B channel");
     }
 
@@ -886,7 +905,7 @@ function colorStack(stack, viewR, viewG, viewB, doScnr = true) {
         let scnr = new SCNR();
         scnr.executeOn(combinedView);
     }
-    stopProcessing();
+    JobStack.stopProcessing();
     return combinedView;
 }
 
@@ -897,11 +916,11 @@ function setFilter(view, stack) {
 
 function customizeDialog() {
     //#region Init Stuff
-    dialog.infoBox.text = "<b>EZ Live Stack:</b> Select a file in a folder as reference. All remaining files in the folder will be stacked. The folder will be watched for new files and stack them.";
+    GlobalDialog.infoBox.text = "<b>EZ Live Stack:</b> Select a file in a folder as reference. All remaining files in the folder will be stacked. The folder will be watched for new files and stack them.";
 
-    dialog.onExit = function () {
-        for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-            let stack = dialog.tabBox.pageControlByIndex(i).stack;
+    GlobalDialog.onExit = function () {
+        for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+            let stack = GlobalDialog.tabBox.pageControlByIndex(i).stack;
             if (stack == null) continue;
             stopWatchingFolder(stack);
             if (stack.viewExists()) {
@@ -920,32 +939,32 @@ function customizeDialog() {
         }
     }
 
-    dialog.onEmptyMainView = function () { }
+    GlobalDialog.onEmptyMainView = function () { }
 
-    dialog.onSelectedMainView = function () { }
+    GlobalDialog.onSelectedMainView = function () { }
 
-    dialog.onEvaluate = function () { }
+    GlobalDialog.onEvaluate = function () { }
 
-    dialog.canEvaluate = function () {
+    GlobalDialog.canEvaluate = function () {
         return false;
     }
 
-    dialog.canRun = function () {
+    GlobalDialog.canRun = function () {
         return false;
     }
 
-    dialog.bindings = function () {
+    GlobalDialog.bindings = function () {
 
     }
 
-    dialog.isColorStacking = false;
-    dialog.doScnr = true;
+    GlobalDialog.isColorStacking = false;
+    GlobalDialog.doScnr = true;
 
-    dialog.mainViewSelector.hide();
+    GlobalDialog.mainViewSelector.hide();
     //#endregion Init Stuff
 
-    dialog.tutorialPrerequisites = ["Readable folder with images"];
-    dialog.tutorialSteps = [
+    GlobalDialog.tutorialPrerequisites = ["Readable folder with images"];
+    GlobalDialog.tutorialSteps = [
         "Select a reference image with 'Start new live stack', images from that folder with the same filter (if able to read from metadata) will be stacked",
         "Select calibration frames and debayer options",
         "Press 'Start Watching Folder' to monitor the folder of the reference file for new files",
@@ -957,13 +976,13 @@ function customizeDialog() {
         "Icon explanation; Square: idle, Circle: monitoring, Triangle: stacking "
     ];
 
-    dialog.selectMainReferenceButton = new PushButton(dialog);
-    with (dialog.selectMainReferenceButton) {
+    GlobalDialog.selectMainReferenceButton = new PushButton(GlobalDialog);
+    with (GlobalDialog.selectMainReferenceButton) {
         text = "Start new Live Stack";
         toolTip = "Selects Main Reference File";
-        icon = dialog.scaledResource(":/icons/window-new.png");
+        icon = GlobalDialog.scaledResource(":/icons/window-new.png");
         bindings = function () {
-            this.enabled = true; //!getValueOrDefault(dialog.CurrentStack().watchingFolder, false);
+            this.enabled = true; //!getValueOrDefault(GlobalDialog.CurrentStack().watchingFolder, false);
         }
         onClick = function () {
             let fileDialog = new OpenFileDialog();
@@ -971,70 +990,70 @@ function customizeDialog() {
             fileDialog.loadImageFilters();
             if (fileDialog.execute()) {
                 if(fileDialog.fileName.indexOf(DebayeredFilesPrefix) >= 0) {
-                    dialog.showWarningDialog("Please select a non-debayered, non-calibrated file as reference, if calibrated or debayered frames are present the calibration and debayering will not happen again but use those files instead",
+                    GlobalDialog.showWarningDialog("Please select a non-debayered, non-calibrated file as reference, if calibrated or debayered frames are present the calibration and debayering will not happen again but use those files instead",
                     "Cannot use debayered or calibrated files as reference",
                     "Fine");
                     return;
                 }
                 if(fileDialog.fileName.indexOf(CalibratedFilesPrefix) >= 0) {
-                    dialog.showWarningDialog("Please select a non-calibrated file as reference, if calibrated are present the calibration will not happen again but use those files instead",
+                    GlobalDialog.showWarningDialog("Please select a non-calibrated file as reference, if calibrated are present the calibration will not happen again but use those files instead",
                     "Cannot use calibrated files as reference",
                     "Fine");
                     return;
                 }
-                dialog.setMainReference(fileDialog.fileName);
+                GlobalDialog.setMainReference(fileDialog.fileName);
             }
             this.hasFocus = false;
         }
     }
 
-    dialog.selectMonitoringDirectoryButton = new PushButton(dialog);
-    with (dialog.selectMonitoringDirectoryButton) {
+    GlobalDialog.selectMonitoringDirectoryButton = new PushButton(GlobalDialog);
+    with (GlobalDialog.selectMonitoringDirectoryButton) {
         text = "Change Monitoring Folder";
         toolTip = "Adjusts the folder to monitor";
-        icon = dialog.scaledResource(":/icons/folder.png");
+        icon = GlobalDialog.scaledResource(":/icons/folder.png");
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, null) != null
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1;
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, null) != null
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1;
         }
         onClick = function () {
             let directoryDialog = new GetDirectoryDialog();
             if (directoryDialog.execute()) {
-                dialog.CurrentStack().setPathToWatch(directoryDialog.directory);
+                GlobalDialog.CurrentStack().setPathToWatch(directoryDialog.directory);
             }
             this.hasFocus = false;
         }
     }
 
-    dialog.CurrentStack = function () {
-        return dialog.tabBox.currentPageIndex < 0 ? new Stack() : dialog.tabBox.pageControlByIndex(dialog.tabBox.currentPageIndex).stack;
+    GlobalDialog.CurrentStack = function () {
+        return GlobalDialog.tabBox.currentPageIndex < 0 ? new Stack() : GlobalDialog.tabBox.pageControlByIndex(GlobalDialog.tabBox.currentPageIndex).stack;
     }
 
-    dialog.setWatchingFolder = function (path, stack) {
+    GlobalDialog.setWatchingFolder = function (path, stack) {
         stack.getStackView().storeProperty(PathProperty, path);
         stack.pathToWatch = path;
     }
 
-    dialog.selectMonitoringLabel = new Label(dialog);
-    with (dialog.selectMonitoringLabel) {
+    GlobalDialog.selectMonitoringLabel = new Label(GlobalDialog);
+    with (GlobalDialog.selectMonitoringLabel) {
         bindings = function () {
-            this.text = "Directory: " + getValueOrDefault(dialog.CurrentStack().pathToWatch, "-");
+            this.text = "Directory: " + getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "-");
         }
         wordWrapping = true;
         useRichText = true;
     }
 
-    dialog.setMainReference = function (path) {
+    GlobalDialog.setMainReference = function (path) {
         let fileInfo = new FileInfo(path);
-        dialog.addMainView(null, fileInfo);
+        GlobalDialog.addMainView(null, fileInfo);
     }
 
-    dialog.addMainView = function (view, fileInfo, stack) {
-        let integrationControl = new PreviewControl(dialog, false, false);
+    GlobalDialog.addMainView = function (view, fileInfo, stack) {
+        let integrationControl = new PreviewControl(GlobalDialog, false, false);
 
         integrationControl.computeAltImage = function () {
-            startProcessing();
-            writeMessageStart("Rendering new image");
+            JobStack.startProcessing();
+            ConsoleWriter.writeMessageStart("Rendering new image");
             if (this.previewFrameAltWindow != null) {
                 this.previewFrameAltWindow.forceClose();
             }
@@ -1079,8 +1098,8 @@ function customizeDialog() {
             this.stack.bitmap = generateHistogramImage(this.previewFrameAltWindow.mainView);
             this.stack.noiseEval = generateNoiseEvalImage(this.stack.getStackView().propertyValue(NoiseEvalProperty));
             if(this.firstCompute) this.firstCompute = false;
-            writeMessageEnd();
-            stopProcessing();
+            ConsoleWriter.writeMessageEnd();
+            JobStack.stopProcessing();
         }
 
         var newWindow = null;
@@ -1090,7 +1109,7 @@ function customizeDialog() {
         } else {
             integrationControl.stack = stack;
             newWindow = view.window;
-            dialog.previousStackSelector.remove(view);
+            GlobalDialog.previousStackSelector.remove(view);
             stack.parent = integrationControl;
         }
 
@@ -1107,7 +1126,7 @@ function customizeDialog() {
         }
 
         setFilter(newWindow.mainView, integrationControl.stack);
-        dialog.tabBox.addPage(integrationControl, "Live Stack [Filter:" + integrationControl.stack.filter + "]");
+        GlobalDialog.tabBox.addPage(integrationControl, "Live Stack [Filter:" + integrationControl.stack.filter + "]");
         integrationControl.firstCompute = (view == null);
 
         // fresh stack, load stuff from settings
@@ -1129,7 +1148,7 @@ function customizeDialog() {
         integrationControl.SetView(integrationControl.stack.getStackView(), true);
 
         integrationControl.bindings = function () {
-            if (isProcessing()) return;
+            if (JobStack.isProcessing()) return;
             if (this.historyIndex != this.previewFrameWindow.mainView.historyIndex) {
                 this.historyIndex = this.previewFrameWindow.mainView.historyIndex;
                 this.forceRerender();
@@ -1138,21 +1157,21 @@ function customizeDialog() {
 
         integrationControl.stack.status = "Ready, press 'Start watching folder' to enable live stacking";
 
-        if (dialog.tabBox.numberOfPages == 1) {
-            dialog.tabBox.show();
-            dialog.adjustToContents();
+        if (GlobalDialog.tabBox.numberOfPages == 1) {
+            GlobalDialog.tabBox.show();
+            GlobalDialog.adjustToContents();
         }
 
-        dialog.tabBox.currentPageIndex = dialog.tabBox.numberOfPages - 1;
+        GlobalDialog.tabBox.currentPageIndex = GlobalDialog.tabBox.numberOfPages - 1;
     }
 
-    dialog.addColorStack = function () {
-        startProcessing();
-        writeMessageStart("Starting RGB Stacking");
-        let integrationControl = dialog.findControlInTabBox("Live RGB Stack");
+    GlobalDialog.addColorStack = function () {
+        JobStack.startProcessing();
+        ConsoleWriter.writeMessageStart("Starting RGB Stacking");
+        let integrationControl = GlobalDialog.findControlInTabBox("Live RGB Stack");
         let wasNull = integrationControl == null;
         if (wasNull) {
-            integrationControl = new PreviewControl(dialog, false, false);
+            integrationControl = new PreviewControl(GlobalDialog, false, false);
             integrationControl.infoFrame.hide();
             integrationControl.stack = new Stack();
         } else {
@@ -1166,26 +1185,26 @@ function customizeDialog() {
         }
 
         let add = wasNull ? 1 : 0;
-        integrationControl.channelR = dialog.channel1ComboBox.currentItem + 1;
-        integrationControl.channelG = dialog.channel2ComboBox.currentItem + 1;
-        integrationControl.channelB = dialog.channel3ComboBox.currentItem + 1;
-        integrationControl.historyRIndex = dialog.tabBox.pageControlByIndex(integrationControl.channelR - add).previewFrameWindow.mainView.historyIndex;
-        integrationControl.historyGIndex = dialog.tabBox.pageControlByIndex(integrationControl.channelG - add).previewFrameWindow.mainView.historyIndex;
-        integrationControl.historyBIndex = dialog.tabBox.pageControlByIndex(integrationControl.channelB - add).previewFrameWindow.mainView.historyIndex;
+        integrationControl.channelR = GlobalDialog.channel1ComboBox.currentItem + 1;
+        integrationControl.channelG = GlobalDialog.channel2ComboBox.currentItem + 1;
+        integrationControl.channelB = GlobalDialog.channel3ComboBox.currentItem + 1;
+        integrationControl.historyRIndex = GlobalDialog.tabBox.pageControlByIndex(integrationControl.channelR - add).previewFrameWindow.mainView.historyIndex;
+        integrationControl.historyGIndex = GlobalDialog.tabBox.pageControlByIndex(integrationControl.channelG - add).previewFrameWindow.mainView.historyIndex;
+        integrationControl.historyBIndex = GlobalDialog.tabBox.pageControlByIndex(integrationControl.channelB - add).previewFrameWindow.mainView.historyIndex;
 
         let newView = null;
         try {
-            newView = colorStack(integrationControl.stack, dialog.tabBox.pageControlByIndex(integrationControl.channelR - add).previewFrameWindow.mainView,
-                dialog.tabBox.pageControlByIndex(integrationControl.channelG - add).previewFrameWindow.mainView,
-                dialog.tabBox.pageControlByIndex(integrationControl.channelB - add).previewFrameWindow.mainView);
+            newView = colorStack(integrationControl.stack, GlobalDialog.tabBox.pageControlByIndex(integrationControl.channelR - add).previewFrameWindow.mainView,
+                GlobalDialog.tabBox.pageControlByIndex(integrationControl.channelG - add).previewFrameWindow.mainView,
+                GlobalDialog.tabBox.pageControlByIndex(integrationControl.channelB - add).previewFrameWindow.mainView);
         } catch (e) {
-            dialog.showWarningDialog("Error during alignment of images: {0}".format(e), "Error", "Fine", false);
-            dialog.isColorStacking = false;
+            GlobalDialog.showWarningDialog("Error during alignment of images: {0}".format(e), "Error", "Fine", false);
+            GlobalDialog.isColorStacking = false;
             return;
         }
 
         integrationControl.computeOrgImage = function (view) {
-            writeMessageBlock("Combining RGB image");
+            ConsoleWriter.writeMessageBlock("Combining RGB image");
             if (this.firstRun) {
                 this.firstRun = false;
                 this.previewFrameWindow = view.window;
@@ -1193,9 +1212,9 @@ function customizeDialog() {
                 return;
             }
 
-            let newView = colorStack(this.stack, dialog.tabBox.pageControlByIndex(this.channelR).previewFrameWindow.mainView,
-                dialog.tabBox.pageControlByIndex(this.channelG).previewFrameWindow.mainView,
-                dialog.tabBox.pageControlByIndex(this.channelB).previewFrameWindow.mainView);
+            let newView = colorStack(this.stack, GlobalDialog.tabBox.pageControlByIndex(this.channelR).previewFrameWindow.mainView,
+                GlobalDialog.tabBox.pageControlByIndex(this.channelG).previewFrameWindow.mainView,
+                GlobalDialog.tabBox.pageControlByIndex(this.channelB).previewFrameWindow.mainView);
 
             newView.id = "_ez_temp_LiveView_ColorStack"
             newView.window.hide();
@@ -1217,136 +1236,136 @@ function customizeDialog() {
         }
 
         integrationControl.firstRun = true;
-        stopProcessing();
+        JobStack.stopProcessing();
         integrationControl.SetView(newView, true);
         newView.window.forceClose();
 
         if (wasNull) {
-            dialog.tabBox.insertPage(0, integrationControl, "Live RGB Stack");
-            dialog.tabBox.currentPageIndex = 0;
+            GlobalDialog.tabBox.insertPage(0, integrationControl, "Live RGB Stack");
+            GlobalDialog.tabBox.currentPageIndex = 0;
         }
 
         integrationControl.bindings = function () {
-            if (isProcessing()) return;
-            this.stack.watchingFolder = dialog.isColorStacking;
-            if (!dialog.isColorStacking) return;
-            if (this.historyRIndex != dialog.tabBox.pageControlByIndex(this.channelR).previewFrameWindow.mainView.historyIndex
-                || this.channelR != dialog.channel1ComboBox.currentItem + 1) {
-                writeMessageStart("RGB Stack detected change in R");
-                this.channelR = dialog.channel1ComboBox.currentItem + 1;
-                this.historyRIndex = dialog.tabBox.pageControlByIndex(this.channelR).previewFrameWindow.mainView.historyIndex;
+            if (JobStack.isProcessing()) return;
+            this.stack.watchingFolder = GlobalDialog.isColorStacking;
+            if (!GlobalDialog.isColorStacking) return;
+            if (this.historyRIndex != GlobalDialog.tabBox.pageControlByIndex(this.channelR).previewFrameWindow.mainView.historyIndex
+                || this.channelR != GlobalDialog.channel1ComboBox.currentItem + 1) {
+                ConsoleWriter.writeMessageStart("RGB Stack detected change in R");
+                this.channelR = GlobalDialog.channel1ComboBox.currentItem + 1;
+                this.historyRIndex = GlobalDialog.tabBox.pageControlByIndex(this.channelR).previewFrameWindow.mainView.historyIndex;
                 this.stack.isProcessingFiles = true;
                 this.forceRerender();
                 this.stack.isProcessingFiles = false;
-                writeMessageEnd();
-            } else if (this.historyGIndex != dialog.tabBox.pageControlByIndex(this.channelG).previewFrameWindow.mainView.historyIndex
-                || this.channelG != dialog.channel2ComboBox.currentItem + 1) {
-                writeMessageStart("RGB Stack detected change in G");
-                this.channelG = dialog.channel2ComboBox.currentItem + 1;
-                this.historyGIndex = dialog.tabBox.pageControlByIndex(this.channelG).previewFrameWindow.mainView.historyIndex;
+                ConsoleWriter.writeMessageEnd();
+            } else if (this.historyGIndex != GlobalDialog.tabBox.pageControlByIndex(this.channelG).previewFrameWindow.mainView.historyIndex
+                || this.channelG != GlobalDialog.channel2ComboBox.currentItem + 1) {
+                ConsoleWriter.writeMessageStart("RGB Stack detected change in G");
+                this.channelG = GlobalDialog.channel2ComboBox.currentItem + 1;
+                this.historyGIndex = GlobalDialog.tabBox.pageControlByIndex(this.channelG).previewFrameWindow.mainView.historyIndex;
                 this.stack.isProcessingFiles = true;
                 this.forceRerender();
                 this.stack.isProcessingFiles = false;
-                writeMessageEnd();
-            } else if (this.historyBIndex != dialog.tabBox.pageControlByIndex(this.channelB).previewFrameWindow.mainView.historyIndex
-                || this.channelB != dialog.channel3ComboBox.currentItem + 1) {
-                writeMessageStart("RGB Stack detected change in B");
-                this.channelB = dialog.channel3ComboBox.currentItem + 1;
-                this.historyBIndex = dialog.tabBox.pageControlByIndex(this.channelB).previewFrameWindow.mainView.historyIndex;
+                ConsoleWriter.writeMessageEnd();
+            } else if (this.historyBIndex != GlobalDialog.tabBox.pageControlByIndex(this.channelB).previewFrameWindow.mainView.historyIndex
+                || this.channelB != GlobalDialog.channel3ComboBox.currentItem + 1) {
+                ConsoleWriter.writeMessageStart("RGB Stack detected change in B");
+                this.channelB = GlobalDialog.channel3ComboBox.currentItem + 1;
+                this.historyBIndex = GlobalDialog.tabBox.pageControlByIndex(this.channelB).previewFrameWindow.mainView.historyIndex;
                 this.stack.isProcessingFiles = true;
                 this.forceRerender();
                 this.stack.isProcessingFiles = false;
-                writeMessageEnd();
+                ConsoleWriter.writeMessageEnd();
             }
         }
-        writeMessageEnd("Initial RGB Stack complete");
+        ConsoleWriter.writeMessageEnd("Initial RGB Stack complete");
     }
 
-    dialog.watchButton = new PushButton(dialog);
-    with (dialog.watchButton) {
+    GlobalDialog.watchButton = new PushButton(GlobalDialog);
+    with (GlobalDialog.watchButton) {
         bindings = function () {
-            this.enabled = dialog.CurrentStack().pathToWatch != "";
-            this.text = getValueOrDefault(dialog.CurrentStack().watchingFolder, false) ? "Stop watching folder" : "Start watching folder";
-            this.icon = getValueOrDefault(dialog.CurrentStack().watchingFolder, false) ? dialog.scaledResource(":/icons/delete.png") : dialog.scaledResource(":/icons/ok.png");
+            this.enabled = GlobalDialog.CurrentStack().pathToWatch != "";
+            this.text = getValueOrDefault(GlobalDialog.CurrentStack().watchingFolder, false) ? "Stop watching folder" : "Start watching folder";
+            this.icon = getValueOrDefault(GlobalDialog.CurrentStack().watchingFolder, false) ? GlobalDialog.scaledResource(":/icons/delete.png") : GlobalDialog.scaledResource(":/icons/ok.png");
         }
         onClick = function () {
-            if (dialog.CurrentStack().watchingFolder) {
-                stopWatchingFolder(dialog.CurrentStack());
-                dialog.CurrentStack().status = "Ready, press 'Start watching folder' to enable live stacking";
+            if (GlobalDialog.CurrentStack().watchingFolder) {
+                stopWatchingFolder(GlobalDialog.CurrentStack());
+                GlobalDialog.CurrentStack().status = "Ready, press 'Start watching folder' to enable live stacking";
             } else {
-                dialog.CurrentStack().status = "Initializing";
-                startWatchingFolder(dialog.CurrentStack());
+                GlobalDialog.CurrentStack().status = "Initializing";
+                startWatchingFolder(GlobalDialog.CurrentStack());
             }
             this.hasFocus = false;
         }
     }
 
-    dialog.histogramFrame = new Frame(dialog);
-    with (dialog.histogramFrame) {
+    GlobalDialog.histogramFrame = new Frame(GlobalDialog);
+    with (GlobalDialog.histogramFrame) {
         scaledMinWidth = 220;
         scaledMinHeight = 80;
-        dialog.histogramFrame.previousStack = null;
+        GlobalDialog.histogramFrame.previousStack = null;
         bindings = function () {
-            if (dialog.tabBox.currentPageControl == null) return;
-            if (dialog.tabBox.currentPageControl.stack != this.previousStack) {
-                this.previousStack = dialog.tabBox.currentPageControl.stack;
+            if (GlobalDialog.tabBox.currentPageControl == null) return;
+            if (GlobalDialog.tabBox.currentPageControl.stack != this.previousStack) {
+                this.previousStack = GlobalDialog.tabBox.currentPageControl.stack;
                 this.repaint();
             }
         }
     }
 
-    dialog.histogramFrame.onPaint = function (x0, y0, x1, y1) {
+    GlobalDialog.histogramFrame.onPaint = function (x0, y0, x1, y1) {
         var graphics = new VectorGraphics(this);
         graphics.antialiasing = true;
         graphics.fillRect(x0, y0, x1, y1, new Brush(0xff202020));
-        if (dialog.tabBox.currentPageControl != null && dialog.tabBox.currentPageControl.stack != null && dialog.tabBox.currentPageControl.stack.bitmap != null) {
-            graphics.drawScaledBitmap(x0 + 5, y0 + 5, x1 - 5, y1 - 5, dialog.tabBox.currentPageControl.stack.bitmap);
+        if (GlobalDialog.tabBox.currentPageControl != null && GlobalDialog.tabBox.currentPageControl.stack != null && GlobalDialog.tabBox.currentPageControl.stack.bitmap != null) {
+            graphics.drawScaledBitmap(x0 + 5, y0 + 5, x1 - 5, y1 - 5, GlobalDialog.tabBox.currentPageControl.stack.bitmap);
         }
         graphics.end();
     }
 
-    dialog.noiseEvalFrame = new Frame(dialog);
-    with (dialog.noiseEvalFrame) {
+    GlobalDialog.noiseEvalFrame = new Frame(GlobalDialog);
+    with (GlobalDialog.noiseEvalFrame) {
         scaledMinWidth = 220;
         scaledMinHeight = 140;
-        dialog.noiseEvalFrame.previousStack = null;
+        GlobalDialog.noiseEvalFrame.previousStack = null;
         bindings = function () {
-            if (dialog.tabBox.currentPageControl == null) return;
-            if (dialog.tabBox.currentPageControl.stack != this.previousStack) {
-                this.previousStack = dialog.tabBox.currentPageControl.stack;
+            if (GlobalDialog.tabBox.currentPageControl == null) return;
+            if (GlobalDialog.tabBox.currentPageControl.stack != this.previousStack) {
+                this.previousStack = GlobalDialog.tabBox.currentPageControl.stack;
                 this.repaint();
             }
         }
     }
 
-    dialog.noiseEvalFrame.onPaint = function (x0, y0, x1, y1) {
+    GlobalDialog.noiseEvalFrame.onPaint = function (x0, y0, x1, y1) {
         var graphics = new VectorGraphics(this);
         graphics.antialiasing = true;
         graphics.fillRect(x0, y0, x1, y1, new Brush(0xff202020));
-        if (dialog.tabBox.currentPageControl != null && dialog.tabBox.currentPageControl.stack != null && dialog.tabBox.currentPageControl.stack.noiseEval != null) {
-            graphics.drawScaledBitmap(x0 + 5, y0 + 5, x1 - 5, y1 - 5, dialog.tabBox.currentPageControl.stack.noiseEval);
+        if (GlobalDialog.tabBox.currentPageControl != null && GlobalDialog.tabBox.currentPageControl.stack != null && GlobalDialog.tabBox.currentPageControl.stack.noiseEval != null) {
+            graphics.drawScaledBitmap(x0 + 5, y0 + 5, x1 - 5, y1 - 5, GlobalDialog.tabBox.currentPageControl.stack.noiseEval);
         }
         graphics.end();
     }
 
-    dialog.selectBiasButton = new PushButton(dialog);
-    with (dialog.selectBiasButton) {
+    GlobalDialog.selectBiasButton = new PushButton(GlobalDialog);
+    with (GlobalDialog.selectBiasButton) {
         bindings = function () {
-            this.enabled = !dialog.CurrentStack().watchingFolder && dialog.CurrentStack().viewExists();
-            if (dialog.CurrentStack().biasPath == null) {
+            this.enabled = !GlobalDialog.CurrentStack().watchingFolder && GlobalDialog.CurrentStack().viewExists();
+            if (GlobalDialog.CurrentStack().biasPath == null) {
                 this.text = "Bias";
-                this.icon = dialog.scaledResource(":/image-container/add-files.png");
+                this.icon = GlobalDialog.scaledResource(":/image-container/add-files.png");
                 this.toolTip = "Selects Bias Reference File";
                 this.onClick = function () {
-                    dialog.CurrentStack().setBiasPath(dialog.openImageFileDialog());
+                    GlobalDialog.CurrentStack().setBiasPath(GlobalDialog.openImageFileDialog());
                     this.hasFocus = false;
                 }
             } else {
                 this.text = "Bias";
-                this.icon = dialog.scaledResource(":/icons/delete.png");
-                this.toolTip = dialog.CurrentStack().biasPath;
+                this.icon = GlobalDialog.scaledResource(":/icons/delete.png");
+                this.toolTip = GlobalDialog.CurrentStack().biasPath;
                 this.onClick = function () {
-                    dialog.CurrentStack().setBiasPath(null);
+                    GlobalDialog.CurrentStack().setBiasPath(null);
                     this.hasFocus = false;
                 }
             }
@@ -1354,56 +1373,56 @@ function customizeDialog() {
     }
 
     //#region MasterFlat
-    dialog.generateMasterFlatButton = new PushButton(dialog);
-    with(dialog.generateMasterFlatButton) {
+    GlobalDialog.generateMasterFlatButton = new PushButton(GlobalDialog);
+    with(GlobalDialog.generateMasterFlatButton) {
         text = "Generate Master Flat";
-        icon = dialog.scaledResource(":/icons/picture-new.png");
+        icon = GlobalDialog.scaledResource(":/icons/picture-new.png");
         bindings = function() {
-            this.enabled = !dialog.CurrentStack().watchingFolder && dialog.CurrentStack().viewExists() && dialog.CurrentStack().flatPath == null;
+            this.enabled = !GlobalDialog.CurrentStack().watchingFolder && GlobalDialog.CurrentStack().viewExists() && GlobalDialog.CurrentStack().flatPath == null;
         }
         onClick = function() {
-            startProcessing();
-            dialog.CurrentStack().isProcessingFiles = true;
+            JobStack.startProcessing();
+            GlobalDialog.CurrentStack().isProcessingFiles = true;
             // if master bias is present ask user if they want to calibrate with present bias
             let useExistingBias = false;
             let biasPath = null;
             let singleFlatFilePath = null;
-            if(dialog.CurrentStack().biasPath != null) {
-                useExistingBias = dialog.showQuestionDialog("You currently have a master bias loaded at <br/><i>" + dialog.CurrentStack().biasPath + "</i>"
+            if(GlobalDialog.CurrentStack().biasPath != null) {
+                useExistingBias = GlobalDialog.showQuestionDialog("You currently have a master bias loaded at <br/><i>" + GlobalDialog.CurrentStack().biasPath + "</i>"
                 + "<br/>Do you want to use that bias for flat calibration?"
                 + "<br/><br/><i>If you use this bias you will not be asked for dark flats.</i>", 
                 "Use selected bias for flat calibration?", "Use current bias", "Select new master bias/dark flat");
                 if(useExistingBias) {
-                    biasPath = dialog.CurrentStack().biasPath;
+                    biasPath = GlobalDialog.CurrentStack().biasPath;
                 }
             }
-            // else show dialog selecting master bias or flat dark
+            // else show GlobalDialog selecting master bias or flat dark
             if(!useExistingBias) {
-                if(dialog.showWarningDialog("Select the master bias or dark flat that you want to use to calibrate the flats with"
+                if(GlobalDialog.showWarningDialog("Select the master bias or dark flat that you want to use to calibrate the flats with"
                     + " or press Cancel to not use any calibration (not recommended)",
                     "Select master bias / dark flat", "OK", true)) {
                     while(biasPath == null) {
-                        biasPath = dialog.openImageFileDialog();
-                        if(biasPath == null && !dialog.showWarningDialog("No bias/dark flat has been selected, do you want to cancel the operation completely?", "Cancel operation?",
+                        biasPath = GlobalDialog.openImageFileDialog();
+                        if(biasPath == null && !GlobalDialog.showWarningDialog("No bias/dark flat has been selected, do you want to cancel the operation completely?", "Cancel operation?",
                         "Select again", true)) {
-                            stopProcessing();
-                            dialog.CurrentStack().isProcessingFiles = false;
+                            JobStack.stopProcessing();
+                            GlobalDialog.CurrentStack().isProcessingFiles = false;
                             return;
                         }
                     }
                 }
             }
 
-            // show dialog "select single flat, it will load and integrate all fitting flat files from the folder"
+            // show GlobalDialog "select single flat, it will load and integrate all fitting flat files from the folder"
             while(singleFlatFilePath == null) {
-                dialog.showWarningDialog("Select a single flat file to generate the master flat from."
+                GlobalDialog.showWarningDialog("Select a single flat file to generate the master flat from."
                 +"<br/><br/><i>The script will load in <b>all files of the same filter</b> in that folder and integrate them!</i>",
                 "Select flat file to integrate", "OK", false);
-                singleFlatFilePath = dialog.openImageFileDialog();
-                if(singleFlatFilePath == null && !dialog.showWarningDialog("No flat has been selected, do you want to cancel the operation completely?", "Cancel operation?",
+                singleFlatFilePath = GlobalDialog.openImageFileDialog();
+                if(singleFlatFilePath == null && !GlobalDialog.showWarningDialog("No flat has been selected, do you want to cancel the operation completely?", "Cancel operation?",
                 "Select again", true)) {
-                    stopProcessing();
-                    dialog.CurrentStack().isProcessingFiles = false;
+                    JobStack.stopProcessing();
+                    GlobalDialog.CurrentStack().isProcessingFiles = false;
                     return;
                 }
             }
@@ -1417,19 +1436,19 @@ function customizeDialog() {
             let originalFilter = newWindow.mainView.readPropertyOrKeyword("Instruments:Filter:Name", "FILTER");
             newWindow.forceClose();
 
-            if(!dialog.showWarningDialog("The script will now integrate the master flat with following settings:"
+            if(!GlobalDialog.showWarningDialog("The script will now integrate the master flat with following settings:"
             +"<br/>"
             +"<br/>Bias/DarkFlat: " + (biasPath == null ? "No bias" : biasPath)
             +"<br/>Flat folder: " + flatFilePath
             +"<br/>Flat filter: " + (originalFilter == null ? "None" : originalFilter)
             +"<br/><br/>Do you want to continue stacking the master flat?",
             "Continue with following settings?", "Continue", true)) {
-                stopProcessing();
-                dialog.CurrentStack().isProcessing = false;
+                JobStack.stopProcessing();
+                GlobalDialog.CurrentStack().isProcessing = false;
                 return;
             }
 
-            writeMessageStart("Starting master flat generation");
+            ConsoleWriter.writeMessageStart("Starting master flat generation");
             let files = new FileFind();
             let flatFiles = [];
             files.begin(flatFilePath + "/*");
@@ -1445,7 +1464,7 @@ function customizeDialog() {
                 }
             } while (files.next());
 
-            writeMessageBlock("Checking filters in files");
+            ConsoleWriter.writeMessageBlock("Checking filters in files");
             // load in all flat files and check all flat files for filter
             let flatFilesCopy = JSON.parse(JSON.stringify(flatFiles));
             for(let fileC = 0;fileC<flatFilesCopy.length;fileC++) {
@@ -1457,21 +1476,21 @@ function customizeDialog() {
                     newWindow = readImage(fullFile);
                 } catch (e) {
                     flatFiles.removeItem(newFile);
-                    writeWarningBlock("Failed to parse file into image. Ignoring file.");
+                    ConsoleWriter.writeWarningBlock("Failed to parse file into image. Ignoring file.");
                     continue;
                 }
         
                 let newFilter = newWindow.mainView.readPropertyOrKeyword("Instruments:Filter:Name", "FILTER");
                 if (newFilter != originalFilter) {
                     flatFiles.removeItem(newFile);
-                    writeWarningBlock("Image had wrong filter, expected was {0} new image is {1}. Ignoring file.".format(originalFilter, newFilter));
+                    ConsoleWriter.writeWarningBlock("Image had wrong filter, expected was {0} new image is {1}. Ignoring file.".format(originalFilter, newFilter));
                 }
                 newWindow.forceClose();
             }
 
             // calibrate if bias/dark flat is set
             if(biasPath != null) {
-                writeMessageBlock("Calibrating flat files with master bias/dark flat");
+                ConsoleWriter.writeMessageBlock("Calibrating flat files with master bias/dark flat");
                 let flatFilesToIntegrate = [];
                 for(let i = 0;i<flatFiles.length;i++) {
                     flatFilesToIntegrate.push([true, flatFilePath + "/"+ flatFiles[i]]);
@@ -1535,7 +1554,7 @@ function customizeDialog() {
                 flatFilesToIntegrate.push([true, flatFilePath + "/" + (biasPath == null ? flatFiles[i] : "ezc_" + flatFiles[i].replace(flatFileExtension, ".xisf")), "", ""]);
             }
 
-            writeMessageBlock("Integrating Master Flat");
+            ConsoleWriter.writeMessageBlock("Integrating Master Flat");
             var flatint = new ImageIntegration;
             flatint.images = flatFilesToIntegrate;
             flatint.inputHints = "";
@@ -1613,40 +1632,40 @@ function customizeDialog() {
             newFlatWindow.saveAs(masterFlatPath, false, false, false, false);
             newFlatWindow.forceClose();
 
-            writeMessageEnd("Master flat saved to " + masterFlatPath);
+            ConsoleWriter.writeMessageEnd("Master flat saved to " + masterFlatPath);
 
             // load flat
-            dialog.CurrentStack().setFlatPath(masterFlatPath);
+            GlobalDialog.CurrentStack().setFlatPath(masterFlatPath);
 
-            dialog.showWarningDialog("Master flat was created and saved to" 
+            GlobalDialog.showWarningDialog("Master flat was created and saved to"
             +"<br/><br/>"+masterFlatPath
             +"<br/><br/>It was also automatically applied to this live stack.", "Flat done", "Oh the time savings!", false);
 
-            dialog.CurrentStack().isProcessingFiles = false;
-            stopProcessing();
+            GlobalDialog.CurrentStack().isProcessingFiles = false;
+            JobStack.stopProcessing();
         }
     }
 
     //#endregion MasterFlat
 
-    dialog.selectFlatButton = new PushButton(dialog);
-    with (dialog.selectFlatButton) {
+    GlobalDialog.selectFlatButton = new PushButton(GlobalDialog);
+    with (GlobalDialog.selectFlatButton) {
         bindings = function () {
-            this.enabled = !dialog.CurrentStack().watchingFolder && dialog.CurrentStack().viewExists();
-            if (dialog.CurrentStack().flatPath == null) {
+            this.enabled = !GlobalDialog.CurrentStack().watchingFolder && GlobalDialog.CurrentStack().viewExists();
+            if (GlobalDialog.CurrentStack().flatPath == null) {
                 this.text = "Flat";
                 this.toolTip = "Selects Flat Reference File";
-                this.icon = dialog.scaledResource(":/image-container/add-files.png");
+                this.icon = GlobalDialog.scaledResource(":/image-container/add-files.png");
                 this.onClick = function () {
-                    dialog.CurrentStack().setFlatPath(dialog.openImageFileDialog());
+                    GlobalDialog.CurrentStack().setFlatPath(GlobalDialog.openImageFileDialog());
                     this.hasFocus = false;
                 }
             } else {
                 this.text = "Flat";
-                this.toolTip = dialog.CurrentStack().flatPath;
-                this.icon = dialog.scaledResource(":/icons/delete.png");
+                this.toolTip = GlobalDialog.CurrentStack().flatPath;
+                this.icon = GlobalDialog.scaledResource(":/icons/delete.png");
                 this.onClick = function () {
-                    dialog.CurrentStack().setFlatPath(null);
+                    GlobalDialog.CurrentStack().setFlatPath(null);
                     this.hasFocus = false;
                 }
             }
@@ -1654,184 +1673,184 @@ function customizeDialog() {
     }
 
 
-    dialog.selectDarkButton = new PushButton(dialog);
-    with (dialog.selectDarkButton) {
+    GlobalDialog.selectDarkButton = new PushButton(GlobalDialog);
+    with (GlobalDialog.selectDarkButton) {
         bindings = function () {
-            this.enabled = !dialog.CurrentStack().watchingFolder && dialog.CurrentStack().viewExists();
-            if (dialog.CurrentStack().darkPath == null) {
+            this.enabled = !GlobalDialog.CurrentStack().watchingFolder && GlobalDialog.CurrentStack().viewExists();
+            if (GlobalDialog.CurrentStack().darkPath == null) {
                 this.text = "Dark";
                 this.toolTip = "Selects Dark Reference File";
-                this.icon = dialog.scaledResource(":/image-container/add-files.png");
+                this.icon = GlobalDialog.scaledResource(":/image-container/add-files.png");
                 this.onClick = function () {
-                    dialog.CurrentStack().setDarkPath(dialog.openImageFileDialog());
+                    GlobalDialog.CurrentStack().setDarkPath(GlobalDialog.openImageFileDialog());
                     this.hasFocus = false;
                 }
             } else {
                 this.text = "Dark";
-                this.toolTip = dialog.CurrentStack().darkPath;
-                this.icon = dialog.scaledResource(":/icons/delete.png");
+                this.toolTip = GlobalDialog.CurrentStack().darkPath;
+                this.icon = GlobalDialog.scaledResource(":/icons/delete.png");
                 this.onClick = function () {
-                    dialog.CurrentStack().setDarkPath(null);
+                    GlobalDialog.CurrentStack().setDarkPath(null);
                     this.hasFocus = false;
                 }
             }
         }
     }
 
-    dialog.darkExpLabel = new Label(dialog);
-    dialog.darkExpLabel.text = "Dark Exposure Time";
-    dialog.darkExpLabel.textAlignment = 2;
+    GlobalDialog.darkExpLabel = new Label(GlobalDialog);
+    GlobalDialog.darkExpLabel.text = "Dark Exposure Time";
+    GlobalDialog.darkExpLabel.textAlignment = 2;
 
-    dialog.darkExpSpinBox = new SpinBox(dialog);
-    with (dialog.darkExpSpinBox) {
+    GlobalDialog.darkExpSpinBox = new SpinBox(GlobalDialog);
+    with (GlobalDialog.darkExpSpinBox) {
         setRange(1, 99999);
         bindings = function () {
-            this.enabled = dialog.CurrentStack().optimizeDark;
-            this.value = dialog.CurrentStack().darkExposureTime;
+            this.enabled = GlobalDialog.CurrentStack().optimizeDark;
+            this.value = GlobalDialog.CurrentStack().darkExposureTime;
         }
         onValueUpdated = function (value) {
-            dialog.CurrentStack().setDarkExposureTime(value);
+            GlobalDialog.CurrentStack().setDarkExposureTime(value);
         }
     }
 
-    dialog.darkExpSizer = new SpacedHorizontalSizer(dialog);
-    dialog.darkExpSizer.addItem(dialog.darkExpLabel);
-    dialog.darkExpSizer.addItem(dialog.darkExpSpinBox);
+    GlobalDialog.darkExpSizer = new SpacedHorizontalSizer(GlobalDialog);
+    GlobalDialog.darkExpSizer.addItem(GlobalDialog.darkExpLabel);
+    GlobalDialog.darkExpSizer.addItem(GlobalDialog.darkExpSpinBox);
 
-    dialog.darkOptimizeGroupBox = new GroupBox(dialog);
-    with (dialog.darkOptimizeGroupBox) {
+    GlobalDialog.darkOptimizeGroupBox = new GroupBox(GlobalDialog);
+    with (GlobalDialog.darkOptimizeGroupBox) {
         title = "Optimize Dark";
         titleCheckBox = true;
         sizer = new HorizontalSizer;
-        sizer.add(dialog.darkExpSizer);
+        sizer.add(GlobalDialog.darkExpSizer);
         bindings = function () {
-            this.checked = dialog.CurrentStack().optimizeDark;
-            this.enabled = dialog.CurrentStack().darkPath != null;
+            this.checked = GlobalDialog.CurrentStack().optimizeDark;
+            this.enabled = GlobalDialog.CurrentStack().darkPath != null;
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setOptimizeDark(value);
+            GlobalDialog.CurrentStack().setOptimizeDark(value);
         }
     }
 
-    dialog.abeDegreeSpinBox = new SpinBox(dialog);
-    with(dialog.abeDegreeSpinBox) {
+    GlobalDialog.abeDegreeSpinBox = new SpinBox(GlobalDialog);
+    with(GlobalDialog.abeDegreeSpinBox) {
         setRange(1,4);
         bindings = function() {
-            this.enabled = dialog.CurrentStack().runABE;
-            this.value = dialog.CurrentStack().ABEdegree;
+            this.enabled = GlobalDialog.CurrentStack().runABE;
+            this.value = GlobalDialog.CurrentStack().ABEdegree;
         }
         onValueUpdated = function(value) {
-            dialog.CurrentStack().setABEDegree(value);
+            GlobalDialog.CurrentStack().setABEDegree(value);
         }
     }
 
-    dialog.abeDegreeLabel = new Label(dialog);
-    dialog.abeDegreeLabel.text = "Function degree";
-    dialog.abeDegreeLabel.textAlignment = 2;
+    GlobalDialog.abeDegreeLabel = new Label(GlobalDialog);
+    GlobalDialog.abeDegreeLabel.text = "Function degree";
+    GlobalDialog.abeDegreeLabel.textAlignment = 2;
 
-    dialog.abeDegreeSizer = new SpacedHorizontalSizer(dialog);
-    dialog.abeDegreeSizer.addItem(dialog.abeDegreeLabel);
-    dialog.abeDegreeSizer.addItem(dialog.abeDegreeSpinBox);
+    GlobalDialog.abeDegreeSizer = new SpacedHorizontalSizer(GlobalDialog);
+    GlobalDialog.abeDegreeSizer.addItem(GlobalDialog.abeDegreeLabel);
+    GlobalDialog.abeDegreeSizer.addItem(GlobalDialog.abeDegreeSpinBox);
 
-    dialog.runABEGroupBox = new GroupBox(dialog);
-    with(dialog.runABEGroupBox) {
+    GlobalDialog.runABEGroupBox = new GroupBox(GlobalDialog);
+    with(GlobalDialog.runABEGroupBox) {
         title = "Run ABE";
         titleCheckBox = true;
         sizer = new HorizontalSizer;
-        sizer.add(dialog.abeDegreeSizer);
+        sizer.add(GlobalDialog.abeDegreeSizer);
         bindings = function() {
-            this.checked = dialog.CurrentStack().runABE;
-            this.enabled = dialog.CurrentStack().pathToWatch != "";
+            this.checked = GlobalDialog.CurrentStack().runABE;
+            this.enabled = GlobalDialog.CurrentStack().pathToWatch != "";
         }
         onCheck = function(value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setRunABE(value);
+            GlobalDialog.CurrentStack().setRunABE(value);
         }
     }
 
-    dialog.downscaleAmountSpinBox = new SpinBox(dialog);
-    with(dialog.downscaleAmountSpinBox) {
+    GlobalDialog.downscaleAmountSpinBox = new SpinBox(GlobalDialog);
+    with(GlobalDialog.downscaleAmountSpinBox) {
         setRange(1,4);
         bindings = function() {
-            this.enabled = dialog.CurrentStack().downscaleImages;
-            this.value = dialog.CurrentStack().downscaleImagesAmount;
+            this.enabled = GlobalDialog.CurrentStack().downscaleImages;
+            this.value = GlobalDialog.CurrentStack().downscaleImagesAmount;
         }
         onValueUpdated = function(value) {
-            dialog.CurrentStack().setDownscaleAmount(value);
+            GlobalDialog.CurrentStack().setDownscaleAmount(value);
         }
     }
 
-    dialog.downscaleAmountLabel = new Label(dialog);
-    dialog.downscaleAmountLabel.text = "Amount";
-    dialog.downscaleAmountLabel.textAlignment = 2;
+    GlobalDialog.downscaleAmountLabel = new Label(GlobalDialog);
+    GlobalDialog.downscaleAmountLabel.text = "Amount";
+    GlobalDialog.downscaleAmountLabel.textAlignment = 2;
 
-    dialog.downscaleAmountSizer = new SpacedHorizontalSizer(dialog);
-    dialog.downscaleAmountSizer.addItem(dialog.downscaleAmountLabel);
-    dialog.downscaleAmountSizer.addItem(dialog.downscaleAmountSpinBox);
+    GlobalDialog.downscaleAmountSizer = new SpacedHorizontalSizer(GlobalDialog);
+    GlobalDialog.downscaleAmountSizer.addItem(GlobalDialog.downscaleAmountLabel);
+    GlobalDialog.downscaleAmountSizer.addItem(GlobalDialog.downscaleAmountSpinBox);
 
-    dialog.downscaleGroupBox = new GroupBox(dialog);
-    with(dialog.downscaleGroupBox) {
+    GlobalDialog.downscaleGroupBox = new GroupBox(GlobalDialog);
+    with(GlobalDialog.downscaleGroupBox) {
         title = "Downscale images";
         titleCheckBox = true;
         sizer = new HorizontalSizer;
-        sizer.add(dialog.downscaleAmountSizer);
+        sizer.add(GlobalDialog.downscaleAmountSizer);
         bindings = function() {
-            this.checked = dialog.CurrentStack().downscaleImages;
-            this.enabled = dialog.CurrentStack().pathToWatch != "";
+            this.checked = GlobalDialog.CurrentStack().downscaleImages;
+            this.enabled = GlobalDialog.CurrentStack().pathToWatch != "";
         }
         onCheck = function(value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setDownscaleImages(value);
+            GlobalDialog.CurrentStack().setDownscaleImages(value);
         }
     }
 
-    dialog.scnrAmountSlider = new NumericControl(dialog);
-	with (dialog.scnrAmountSlider) {
+    GlobalDialog.scnrAmountSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.scnrAmountSlider) {
 		label.text = "Amount";
 		setRange(0.1, 1);
 		slider.setRange(0, 10);
 		setPrecision(1);
-        setValue(dialog.CurrentStack().scnrAmount);
+        setValue(GlobalDialog.CurrentStack().scnrAmount);
 		bindings = function() {
-			this.setValue(dialog.CurrentStack().scnrAmount);
+			this.setValue(GlobalDialog.CurrentStack().scnrAmount);
 		}
 		onValueUpdated = function (value) {
-			dialog.CurrentStack().setSCNRAmount(value);
+			GlobalDialog.CurrentStack().setSCNRAmount(value);
 		}
 	}
 
-    dialog.scnrGroupBox = new GroupBox(dialog);
-    with(dialog.scnrGroupBox) {
+    GlobalDialog.scnrGroupBox = new GroupBox(GlobalDialog);
+    with(GlobalDialog.scnrGroupBox) {
         title = "Run SCNR Green ";
         titleCheckBox = true;
         sizer = new HorizontalSizer;
-        sizer.add(dialog.scnrAmountSlider);
+        sizer.add(GlobalDialog.scnrAmountSlider);
         sizer.margin = 5;
         bindings = function() {
-            this.checked = dialog.CurrentStack().scnr;
-            this.enabled = dialog.CurrentStack().pathToWatch != "" && dialog.CurrentStack().isCFA;
+            this.checked = GlobalDialog.CurrentStack().scnr;
+            this.enabled = GlobalDialog.CurrentStack().pathToWatch != "" && GlobalDialog.CurrentStack().isCFA;
         }
         onCheck = function(value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setRunSCNR(value);
+            GlobalDialog.CurrentStack().setRunSCNR(value);
         }
     }
 
-    dialog.extrasControl = new Control(dialog);
-    with(dialog.extrasControl) {
+    GlobalDialog.extrasControl = new Control(GlobalDialog);
+    with(GlobalDialog.extrasControl) {
         sizer = new VerticalSizer();
-        sizer.addItem(dialog.downscaleGroupBox);
-        sizer.addItem(dialog.runABEGroupBox);
-        sizer.addItem(dialog.scnrGroupBox);
+        sizer.addItem(GlobalDialog.downscaleGroupBox);
+        sizer.addItem(GlobalDialog.runABEGroupBox);
+        sizer.addItem(GlobalDialog.scnrGroupBox);
         sizer.addStretch();
     }
 
-    dialog.settleTimeSpinBox = new SpinBox(dialog);
-    with(dialog.settleTimeSpinBox) {
+    GlobalDialog.settleTimeSpinBox = new SpinBox(GlobalDialog);
+    with(GlobalDialog.settleTimeSpinBox) {
         setRange(1,120);
         bindings = function() {
-            this.enabled = dialog.CurrentStack().pathToWatch != "";
+            this.enabled = GlobalDialog.CurrentStack().pathToWatch != "";
             this.value = readFromSettingsOrDefault("EZLiveStack.SettleTime", 1, 10);
         }
         onValueUpdated = function(value) {
@@ -1840,161 +1859,161 @@ function customizeDialog() {
         }
     }
 
-    dialog.settleTimeLabel = new SpacedRichLabel(dialog);
-    dialog.settleTimeLabel.text = "Time to wait after<br/>image detection (s)";
-    dialog.settleTimeLabel.textAlignment = 2;
+    GlobalDialog.settleTimeLabel = new SpacedRichLabel(GlobalDialog);
+    GlobalDialog.settleTimeLabel.text = "Time to wait after<br/>image detection (s)";
+    GlobalDialog.settleTimeLabel.textAlignment = 2;
 
-    dialog.settleTimeSizer = new SpacedHorizontalSizer(dialog);
-    dialog.settleTimeSizer.addItem(dialog.settleTimeLabel);
-    dialog.settleTimeSizer.addItem(dialog.settleTimeSpinBox);
+    GlobalDialog.settleTimeSizer = new SpacedHorizontalSizer(GlobalDialog);
+    GlobalDialog.settleTimeSizer.addItem(GlobalDialog.settleTimeLabel);
+    GlobalDialog.settleTimeSizer.addItem(GlobalDialog.settleTimeSpinBox);
 
-    dialog.ignoreFilterCheckBox = new CheckBox(dialog);
-    with (dialog.ignoreFilterCheckBox) {
+    GlobalDialog.ignoreFilterCheckBox = new CheckBox(GlobalDialog);
+    with (GlobalDialog.ignoreFilterCheckBox) {
         text = "Ignore Filter Metadata";
         toolTip = "If checked will stack all files regardless of filter metadata";
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, "") != ""
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1;
-            this.checked = getValueOrDefault(dialog.CurrentStack().ignoreFilter, false);
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "") != ""
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1;
+            this.checked = getValueOrDefault(GlobalDialog.CurrentStack().ignoreFilter, false);
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setIgnoreFilter(value);
+            GlobalDialog.CurrentStack().setIgnoreFilter(value);
         }
     }
 
-    dialog.runNoiseEvalCheckBox = new CheckBox(dialog);
-    with (dialog.runNoiseEvalCheckBox) {
+    GlobalDialog.runNoiseEvalCheckBox = new CheckBox(GlobalDialog);
+    with (GlobalDialog.runNoiseEvalCheckBox) {
         text = "Run Noise Evaluation";
         toolTip = "If checked will run noise evaluation and graph it. For precise readings, enable noise evaluation before starting the stack!";
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, "") != ""
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1;
-            this.checked = getValueOrDefault(dialog.CurrentStack().runNoiseEval, false);
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "") != ""
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1;
+            this.checked = getValueOrDefault(GlobalDialog.CurrentStack().runNoiseEval, false);
 
-            let noiseEvalIndex = dialog.monitoringInfoTabBox.findControlIndex(dialog.monitoringInfoTabBox.findControl("NoiseEval"));
-            if(!this.checked && dialog.monitoringInfoTabBox.pageIcon(noiseEvalIndex) == null) {
-                dialog.monitoringInfoTabBox.setPageIcon(noiseEvalIndex, new Bitmap(dialog.scaledResource(":/icons/delete.png")));
-                dialog.monitoringInfoTabBox.enablePage(noiseEvalIndex, this.checked);
-                if(dialog.monitoringInfoTabBox.currentPageIndex == noiseEvalIndex) {
-                    dialog.monitoringInfoTabBox.currentPageIndex = 0;
+            let noiseEvalIndex = GlobalDialog.monitoringInfoTabBox.findControlIndex(GlobalDialog.monitoringInfoTabBox.findControl("NoiseEval"));
+            if(!this.checked && GlobalDialog.monitoringInfoTabBox.pageIcon(noiseEvalIndex) == null) {
+                GlobalDialog.monitoringInfoTabBox.setPageIcon(noiseEvalIndex, new Bitmap(GlobalDialog.scaledResource(":/icons/delete.png")));
+                GlobalDialog.monitoringInfoTabBox.enablePage(noiseEvalIndex, this.checked);
+                if(GlobalDialog.monitoringInfoTabBox.currentPageIndex == noiseEvalIndex) {
+                    GlobalDialog.monitoringInfoTabBox.currentPageIndex = 0;
                 }
             }
-            if(this.checked && dialog.monitoringInfoTabBox.pageIcon(noiseEvalIndex) != null)
+            if(this.checked && GlobalDialog.monitoringInfoTabBox.pageIcon(noiseEvalIndex) != null)
             {
-                dialog.monitoringInfoTabBox.clearPageIcon(noiseEvalIndex);
-                dialog.monitoringInfoTabBox.enablePage(noiseEvalIndex, this.checked);
+                GlobalDialog.monitoringInfoTabBox.clearPageIcon(noiseEvalIndex);
+                GlobalDialog.monitoringInfoTabBox.enablePage(noiseEvalIndex, this.checked);
             }
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setRunNoiseEval(value);
+            GlobalDialog.CurrentStack().setRunNoiseEval(value);
         }
     }
 
-    dialog.miscControl = new Control(dialog);
-    with(dialog.miscControl) {
+    GlobalDialog.miscControl = new Control(GlobalDialog);
+    with(GlobalDialog.miscControl) {
         sizer = new SpacedVerticalSizer();
-        sizer.addItem(dialog.ignoreFilterCheckBox);
-        sizer.addItem(dialog.runNoiseEvalCheckBox);
-        sizer.addItem(dialog.settleTimeSizer);
+        sizer.addItem(GlobalDialog.ignoreFilterCheckBox);
+        sizer.addItem(GlobalDialog.runNoiseEvalCheckBox);
+        sizer.addItem(GlobalDialog.settleTimeSizer);
         sizer.addStretch();
     }
 
     // #region "Saving"
-    dialog.saveCompressedCheckBox = new CheckBox(dialog);
-    with (dialog.saveCompressedCheckBox) {
+    GlobalDialog.saveCompressedCheckBox = new CheckBox(GlobalDialog);
+    with (GlobalDialog.saveCompressedCheckBox) {
         text = "Compress saved files";
         toolTip = "Compresses files as LZ4+HC (lossless, adds minimal time)";
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, null) != null
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1
-                && dialog.CurrentStack().saveCalibratedFile;
-            this.checked = getValueOrDefault(dialog.CurrentStack().saveCompressed, false);
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, null) != null
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1
+                && GlobalDialog.CurrentStack().saveCalibratedFile;
+            this.checked = getValueOrDefault(GlobalDialog.CurrentStack().saveCompressed, false);
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setSaveCompressed(value);
+            GlobalDialog.CurrentStack().setSaveCompressed(value);
         }
     }
 
-    dialog.saveAs16BitIntCheckBox = new CheckBox(dialog);
-    with (dialog.saveAs16BitIntCheckBox) {
+    GlobalDialog.saveAs16BitIntCheckBox = new CheckBox(GlobalDialog);
+    with (GlobalDialog.saveAs16BitIntCheckBox) {
         text = "Calibrate to 16bit integer";
         toolTip = "Calibrates files to 16bit integer instead of 32bit float, saves a lot of space, can introduce minor imprecision, averages out through stacking. Personally found no downsides. PI Standard is 32bit float.";
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, null) != null
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1
-                && dialog.CurrentStack().saveCalibratedFile;
-            this.checked = getValueOrDefault(dialog.CurrentStack().saveAs16BitInt, false);
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, null) != null
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1
+                && GlobalDialog.CurrentStack().saveCalibratedFile;
+            this.checked = getValueOrDefault(GlobalDialog.CurrentStack().saveAs16BitInt, false);
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setSaveAs16bit(value);
+            GlobalDialog.CurrentStack().setSaveAs16bit(value);
         }
     }
 
-    dialog.saveDebayeredCheckBox = new CheckBox(dialog);
-    with (dialog.saveDebayeredCheckBox) {
+    GlobalDialog.saveDebayeredCheckBox = new CheckBox(GlobalDialog);
+    with (GlobalDialog.saveDebayeredCheckBox) {
         text = "Save debayered image";
         toolTip = "Will additionally save the debayered image";
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, null) != null
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1
-                && dialog.CurrentStack().saveCalibratedFile
-                && dialog.CurrentStack().isCFA;
-            this.checked = getValueOrDefault(dialog.CurrentStack().saveDebayered, false);
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, null) != null
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1
+                && GlobalDialog.CurrentStack().saveCalibratedFile
+                && GlobalDialog.CurrentStack().isCFA;
+            this.checked = getValueOrDefault(GlobalDialog.CurrentStack().saveDebayered, false);
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setSaveDebayered(value);
+            GlobalDialog.CurrentStack().setSaveDebayered(value);
         }
     }
 
-    dialog.pedestalNumericBox = new SpinBox(dialog);
-    with(dialog.pedestalNumericBox) {
+    GlobalDialog.pedestalNumericBox = new SpinBox(GlobalDialog);
+    with(GlobalDialog.pedestalNumericBox) {
         setRange(0,65535);
         bindings = function() {
-            this.value = dialog.CurrentStack().pedestal;
+            this.value = GlobalDialog.CurrentStack().pedestal;
         }
         onValueUpdated = function(value) {
-            dialog.CurrentStack().setPedestal(value);
+            GlobalDialog.CurrentStack().setPedestal(value);
         }
     }
 
-    dialog.pedestalLabel = new Label(dialog);
-    dialog.pedestalLabel.text = "Pedestal (DN)";
-    dialog.pedestalLabel.textAlignment = 1;
+    GlobalDialog.pedestalLabel = new Label(GlobalDialog);
+    GlobalDialog.pedestalLabel.text = "Pedestal (DN)";
+    GlobalDialog.pedestalLabel.textAlignment = 1;
 
-    dialog.pedestalAmountSizer = new SpacedHorizontalSizer(dialog);
-    dialog.pedestalAmountSizer.addItem(dialog.pedestalLabel);
-    dialog.pedestalAmountSizer.addItem(dialog.pedestalNumericBox);
+    GlobalDialog.pedestalAmountSizer = new SpacedHorizontalSizer(GlobalDialog);
+    GlobalDialog.pedestalAmountSizer.addItem(GlobalDialog.pedestalLabel);
+    GlobalDialog.pedestalAmountSizer.addItem(GlobalDialog.pedestalNumericBox);
 
-    dialog.saveCalibratedImagesGroupBox = new GroupBox(dialog);
-    with(dialog.saveCalibratedImagesGroupBox) {
+    GlobalDialog.saveCalibratedImagesGroupBox = new GroupBox(GlobalDialog);
+    with(GlobalDialog.saveCalibratedImagesGroupBox) {
         titleCheckBox = true;
         title = "Save calibrated files";
         toolTip = "Saves the originally calibrated files";
         bindings = function() {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, null) != null
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1
-                && (dialog.CurrentStack().flatPath != null || dialog.CurrentStack().biasPath != null || dialog.CurrentStack().darkPath != null);
-            this.checked = getValueOrDefault(dialog.CurrentStack().saveCalibratedFile, false);
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, null) != null
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1
+                && (GlobalDialog.CurrentStack().flatPath != null || GlobalDialog.CurrentStack().biasPath != null || GlobalDialog.CurrentStack().darkPath != null);
+            this.checked = getValueOrDefault(GlobalDialog.CurrentStack().saveCalibratedFile, false);
         }
         onCheck = function(value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setSaveCalibratedFile(value);
+            GlobalDialog.CurrentStack().setSaveCalibratedFile(value);
         }
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.saveCompressedCheckBox);
-        sizer.addItem(dialog.saveAs16BitIntCheckBox);
-        sizer.addItem(dialog.saveDebayeredCheckBox);
-        sizer.addItem(dialog.pedestalAmountSizer);
+        sizer.addItem(GlobalDialog.saveCompressedCheckBox);
+        sizer.addItem(GlobalDialog.saveAs16BitIntCheckBox);
+        sizer.addItem(GlobalDialog.saveDebayeredCheckBox);
+        sizer.addItem(GlobalDialog.pedestalAmountSizer);
     }
     // #endregion "Saving"
 
-    dialog.cfaComboBox = new ComboBox(dialog);
-    with (dialog.cfaComboBox) {
+    GlobalDialog.cfaComboBox = new ComboBox(GlobalDialog);
+    with (GlobalDialog.cfaComboBox) {
         editEnabled = false;
         addItem("RGGB");
         addItem("BGGR");
@@ -2005,31 +2024,31 @@ function customizeDialog() {
         addItem("RGBG");
         addItem("BGRG");
         bindings = function () {
-            this.currentItem = getValueOrDefault(dialog.CurrentStack().cfaPattern, 1) - 1;
+            this.currentItem = getValueOrDefault(GlobalDialog.CurrentStack().cfaPattern, 1) - 1;
         }
         onItemSelected = function (itemIndex) {
-            dialog.CurrentStack().setCFAPattern(itemIndex + 1);
+            GlobalDialog.CurrentStack().setCFAPattern(itemIndex + 1);
         };
     }
 
-    dialog.cfaGroupBox = new GroupBox(dialog);
-    with (dialog.cfaGroupBox) {
+    GlobalDialog.cfaGroupBox = new GroupBox(GlobalDialog);
+    with (GlobalDialog.cfaGroupBox) {
         titleCheckBox = true;
         title = "Image is Color";
         sizer = new SpacedHorizontalSizer;
-        sizer.addItem(dialog.cfaComboBox);
+        sizer.addItem(GlobalDialog.cfaComboBox);
         bindings = function () {
-            this.enabled = dialog.CurrentStack().viewExists();
-            this.checked = dialog.CurrentStack().isCFA;
+            this.enabled = GlobalDialog.CurrentStack().viewExists();
+            this.checked = GlobalDialog.CurrentStack().isCFA;
         }
         onCheck = function (value) {
             this.hasFocus = false;
-            dialog.CurrentStack().setCFA(value);
+            GlobalDialog.CurrentStack().setCFA(value);
         }
     }
 
-    dialog.previousStackSelector = new ViewList(dialog);
-    with (dialog.previousStackSelector) {
+    GlobalDialog.previousStackSelector = new ViewList(GlobalDialog);
+    with (GlobalDialog.previousStackSelector) {
         toolTip = "Select Previous Stack";
         onViewSelected = function (value) {
             if (value.isNull) {
@@ -2038,13 +2057,13 @@ function customizeDialog() {
             let view = value;
 
             if(view.propertyValue(PathProperty) == null) {
-                dialog.showWarningDialog("Selected view is not an EZ Live Stack View.", "Failed to load");
-                dialog.previousStackSelector.remove(value);
+                GlobalDialog.showWarningDialog("Selected view is not an EZ Live Stack View.", "Failed to load");
+                GlobalDialog.previousStackSelector.remove(value);
                 return;
             }
 
-            startProcessing();
-            writeMessageStart("Loading in " + value.id);
+            JobStack.startProcessing();
+            ConsoleWriter.writeMessageStart("Loading in " + value.id);
 
             view.window.hide();
 
@@ -2056,141 +2075,141 @@ function customizeDialog() {
             stack.processedFiles = view.propertyValue(StackProperty).split(",");
             stack.calibrated = true;
 
-            dialog.addMainView(view, null, stack);
+            GlobalDialog.addMainView(view, null, stack);
 
-            writeMessageEnd();
-            stopProcessing();
+            ConsoleWriter.writeMessageEnd();
+            JobStack.stopProcessing();
         }
         excludeIdentifiersPattern = "_ez_temp";
         getMainViews();
     }
 
-    dialog.statusLabel = new Label(dialog);
-    dialog.statusLabel.bindings = function () {
-        this.text = "Status: " + dialog.CurrentStack().status;
+    GlobalDialog.statusLabel = new Label(GlobalDialog);
+    GlobalDialog.statusLabel.bindings = function () {
+        this.text = "Status: " + GlobalDialog.CurrentStack().status;
     }
-    dialog.statusLabel.useRichText = true;
-    dialog.statusLabel.wordWrapping = true;
+    GlobalDialog.statusLabel.useRichText = true;
+    GlobalDialog.statusLabel.wordWrapping = true;
 
-    dialog.filterLabel = new Label(dialog);
-    dialog.filterLabel.bindings = function () {
-        this.text = "Filter: " + getValueOrDefault(dialog.CurrentStack().filter, "-");
+    GlobalDialog.filterLabel = new Label(GlobalDialog);
+    GlobalDialog.filterLabel.bindings = function () {
+        this.text = "Filter: " + getValueOrDefault(GlobalDialog.CurrentStack().filter, "-");
     }
-    dialog.filterLabel.useRichText = true;
-    dialog.filterLabel.wordWrapping = true;
+    GlobalDialog.filterLabel.useRichText = true;
+    GlobalDialog.filterLabel.wordWrapping = true;
 
-    dialog.processedFilesLabel = new Label(dialog);
-    dialog.processedFilesLabel.bindings = function () {
-        dialog.processedFilesLabel.text = "Files in Stack: " + (getValueOrDefault(dialog.CurrentStack().processedFiles.length, 0) - getValueOrDefault(dialog.CurrentStack().newFiles.length, 0));
+    GlobalDialog.processedFilesLabel = new Label(GlobalDialog);
+    GlobalDialog.processedFilesLabel.bindings = function () {
+        GlobalDialog.processedFilesLabel.text = "Files in Stack: " + (getValueOrDefault(GlobalDialog.CurrentStack().processedFiles.length, 0) - getValueOrDefault(GlobalDialog.CurrentStack().newFiles.length, 0));
     }
 
-    dialog.addStackGroupBox = new GroupBox(dialog);
-    with (dialog.addStackGroupBox) {
+    GlobalDialog.addStackGroupBox = new GroupBox(GlobalDialog);
+    with (GlobalDialog.addStackGroupBox) {
         title = "1. Stack";
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.previousStackSelector);
-        sizer.addItem(dialog.selectMainReferenceButton);
+        sizer.addItem(GlobalDialog.previousStackSelector);
+        sizer.addItem(GlobalDialog.selectMainReferenceButton);
     }
 
-    dialog.saveCurrentCalibrationButton = new PushButton(dialog);
-    with(dialog.saveCurrentCalibrationButton) {
-        icon = dialog.scaledResource(":/icons/save.png");
+    GlobalDialog.saveCurrentCalibrationButton = new PushButton(GlobalDialog);
+    with(GlobalDialog.saveCurrentCalibrationButton) {
+        icon = GlobalDialog.scaledResource(":/icons/save.png");
         text = "Save all calibration options as default";
         toolTip = "Saves all calibration options as default for future stacks, this includes the calibration frames!";
         bindings = function () {
-            this.enabled = getValueOrDefault(dialog.CurrentStack().pathToWatch, null) != null
-                && fileWatcher.directories.indexOf(getValueOrDefault(dialog.CurrentStack().pathToWatch, "default")) == -1;
+            this.enabled = getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, null) != null
+                && fileWatcher.directories.indexOf(getValueOrDefault(GlobalDialog.CurrentStack().pathToWatch, "default")) == -1;
         }
         onClick = function() {
-            dialog.CurrentStack().saveSettings();
+            GlobalDialog.CurrentStack().saveSettings();
         }
     }
 
-    dialog.calibFramesControl = new Control(dialog);
-    with(dialog.calibFramesControl) {
+    GlobalDialog.calibFramesControl = new Control(GlobalDialog);
+    with(GlobalDialog.calibFramesControl) {
         sizer = new HorizontalSizer();
         sizer.spacing = 5;
-        sizer.addItem(dialog.selectBiasButton);
-        sizer.addItem(dialog.selectFlatButton);
-        sizer.addItem(dialog.selectDarkButton);
+        sizer.addItem(GlobalDialog.selectBiasButton);
+        sizer.addItem(GlobalDialog.selectFlatButton);
+        sizer.addItem(GlobalDialog.selectDarkButton);
     }
 
-    dialog.integrationOptionsControl = new Control(dialog);
-    with (dialog.integrationOptionsControl) {
+    GlobalDialog.integrationOptionsControl = new Control(GlobalDialog);
+    with (GlobalDialog.integrationOptionsControl) {
         sizer = new SpacedVerticalSizer();
-        sizer.addItem(dialog.calibFramesControl);
-        sizer.addItem(dialog.generateMasterFlatButton);
-        sizer.addItem(dialog.darkOptimizeGroupBox);
-        sizer.addItem(dialog.cfaGroupBox);
+        sizer.addItem(GlobalDialog.calibFramesControl);
+        sizer.addItem(GlobalDialog.generateMasterFlatButton);
+        sizer.addItem(GlobalDialog.darkOptimizeGroupBox);
+        sizer.addItem(GlobalDialog.cfaGroupBox);
         sizer.addStretch();
     }
 
-    dialog.integrationSettingsControl = new Control(dialog);
-    with(dialog.integrationSettingsControl) {
+    GlobalDialog.integrationSettingsControl = new Control(GlobalDialog);
+    with(GlobalDialog.integrationSettingsControl) {
         sizer = new SpacedVerticalSizer();
-        sizer.addItem(dialog.saveCalibratedImagesGroupBox);
+        sizer.addItem(GlobalDialog.saveCalibratedImagesGroupBox);
         sizer.addStretch();
     }
 
-    dialog.processingSettingsControl = new Control(dialog);
-    with(dialog.processingSettingsControl) {
+    GlobalDialog.processingSettingsControl = new Control(GlobalDialog);
+    with(GlobalDialog.processingSettingsControl) {
         sizer = new SpacedVerticalSizer();
-        sizer.addItem(dialog.extrasControl);
+        sizer.addItem(GlobalDialog.extrasControl);
         sizer.addStretch();
     }
 
-    dialog.calibrationTabBox = new TabBox(dialog);
-    with(dialog.calibrationTabBox) {
-        addPage(dialog.integrationOptionsControl, "Masters");
-        addPage(dialog.integrationSettingsControl, "Saving");
-        addPage(dialog.processingSettingsControl, "Processing");
-        addPage(dialog.miscControl, "Misc");
+    GlobalDialog.calibrationTabBox = new TabBox(GlobalDialog);
+    with(GlobalDialog.calibrationTabBox) {
+        addPage(GlobalDialog.integrationOptionsControl, "Masters");
+        addPage(GlobalDialog.integrationSettingsControl, "Saving");
+        addPage(GlobalDialog.processingSettingsControl, "Processing");
+        addPage(GlobalDialog.miscControl, "Misc");
     }
 
-    dialog.fullCalibrationControl = new Control(dialog);
-    with(dialog.fullCalibrationControl) {
+    GlobalDialog.fullCalibrationControl = new Control(GlobalDialog);
+    with(GlobalDialog.fullCalibrationControl) {
         setScaledMinHeight(240);
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.calibrationTabBox);
-        sizer.addItem(dialog.saveCurrentCalibrationButton);
+        sizer.addItem(GlobalDialog.calibrationTabBox);
+        sizer.addItem(GlobalDialog.saveCurrentCalibrationButton);
     }
 
-    dialog.integrationOptionsSectionBar = new SectionBar(dialog);
-    with (dialog.integrationOptionsSectionBar) {
+    GlobalDialog.integrationOptionsSectionBar = new SectionBar(GlobalDialog);
+    with (GlobalDialog.integrationOptionsSectionBar) {
         bindings = function () {
-            this.enabled = dialog.CurrentStack().viewExists() && !dialog.CurrentStack().watchingFolder;
-            if (dialog.CurrentStack().watchingFolder && this.isExpanded()) {
+            this.enabled = GlobalDialog.CurrentStack().viewExists() && !GlobalDialog.CurrentStack().watchingFolder;
+            if (GlobalDialog.CurrentStack().watchingFolder && this.isExpanded()) {
                 this.toggleSection();
             }
         }
         setTitle("2. Calibration Options");
-        setSection(dialog.fullCalibrationControl);
+        setSection(GlobalDialog.fullCalibrationControl);
     }
 
-    dialog.filterFilesSizer = new SpacedHorizontalSizer();
-    dialog.filterFilesSizer.addItem(dialog.filterLabel);
-    dialog.filterFilesSizer.addItem(dialog.processedFilesLabel);
+    GlobalDialog.filterFilesSizer = new SpacedHorizontalSizer();
+    GlobalDialog.filterFilesSizer.addItem(GlobalDialog.filterLabel);
+    GlobalDialog.filterFilesSizer.addItem(GlobalDialog.processedFilesLabel);
 
-    dialog.monitoringStatusControl = new Control(dialog);
-    with(dialog.monitoringStatusControl) {
+    GlobalDialog.monitoringStatusControl = new Control(GlobalDialog);
+    with(GlobalDialog.monitoringStatusControl) {
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.watchButton);
-        sizer.addItem(dialog.selectMonitoringDirectoryButton);
-        sizer.addItem(dialog.selectMonitoringLabel);
-        sizer.addItem(dialog.integrationOptionsSectionBar);
-        sizer.addItem(dialog.filterFilesSizer);
+        sizer.addItem(GlobalDialog.watchButton);
+        sizer.addItem(GlobalDialog.selectMonitoringDirectoryButton);
+        sizer.addItem(GlobalDialog.selectMonitoringLabel);
+        sizer.addItem(GlobalDialog.integrationOptionsSectionBar);
+        sizer.addItem(GlobalDialog.filterFilesSizer);
         sizer.addStretch();
     }
 
-    dialog.monitoringHistogramControl = new Control(dialog);
-    with(dialog.monitoringHistogramControl) {
+    GlobalDialog.monitoringHistogramControl = new Control(GlobalDialog);
+    with(GlobalDialog.monitoringHistogramControl) {
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.histogramFrame);
+        sizer.addItem(GlobalDialog.histogramFrame);
     }
 
-    dialog.noiseEvalLabel = new SpacedRichLabel(dialog);
-    dialog.noiseEvalLabel.bindings = function() {
-        let stackView = dialog.CurrentStack().getStackView();
+    GlobalDialog.noiseEvalLabel = new SpacedRichLabel(GlobalDialog);
+    GlobalDialog.noiseEvalLabel.bindings = function() {
+        let stackView = GlobalDialog.CurrentStack().getStackView();
         if(stackView == null || stackView.isNull) return;
         let noiseEvalProp = getValueOrDefault(stackView.propertyValue(NoiseEvalProperty), "1;1").toString();
         let vals = [];
@@ -2205,215 +2224,215 @@ function customizeDialog() {
         }
     }
 
-    dialog.monitoringNoiseEvalControl = new Control(dialog);
-    with(dialog.monitoringNoiseEvalControl) {
+    GlobalDialog.monitoringNoiseEvalControl = new Control(GlobalDialog);
+    with(GlobalDialog.monitoringNoiseEvalControl) {
         sizer = new VerticalSizer;
         setScaledMinHeight(140);
-        sizer.addItem(dialog.noiseEvalLabel);
-        sizer.addItem(dialog.noiseEvalFrame);
+        sizer.addItem(GlobalDialog.noiseEvalLabel);
+        sizer.addItem(GlobalDialog.noiseEvalFrame);
         sizer.addStretch();
     }
 
-    dialog.monitoringInfoTabBox = new TabBox(dialog);
-    with(dialog.monitoringInfoTabBox) {
-        addPage(dialog.monitoringStatusControl, "Status");
-        addPage(dialog.monitoringHistogramControl, "Histogram");
-        addPage(dialog.monitoringNoiseEvalControl, "NoiseEval");
+    GlobalDialog.monitoringInfoTabBox = new TabBox(GlobalDialog);
+    with(GlobalDialog.monitoringInfoTabBox) {
+        addPage(GlobalDialog.monitoringStatusControl, "Status");
+        addPage(GlobalDialog.monitoringHistogramControl, "Histogram");
+        addPage(GlobalDialog.monitoringNoiseEvalControl, "NoiseEval");
 
         onPageSelected = function(value) {
-            dialog.mainControlReplacement.adjustToContents();
+            GlobalDialog.mainControlReplacement.adjustToContents();
         }
     }
 
-    dialog.monitoringGroupBox = new GroupBox(dialog);
-    with (dialog.monitoringGroupBox) {
+    GlobalDialog.monitoringGroupBox = new GroupBox(GlobalDialog);
+    with (GlobalDialog.monitoringGroupBox) {
         bindings = function () {
-            this.enabled = dialog.CurrentStack().viewExists();
+            this.enabled = GlobalDialog.CurrentStack().viewExists();
         }
         setScaledMinHeight(200);
         title = "3. Monitoring";
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.monitoringInfoTabBox);
-        sizer.addItem(dialog.statusLabel);
+        sizer.addItem(GlobalDialog.monitoringInfoTabBox);
+        sizer.addItem(GlobalDialog.statusLabel);
     }
 
     // #region RGBStack
-    dialog.channel1Sizer = new SpacedHorizontalSizer();
-    dialog.channel2Sizer = new SpacedHorizontalSizer();
-    dialog.channel3Sizer = new SpacedHorizontalSizer();
+    GlobalDialog.channel1Sizer = new SpacedHorizontalSizer();
+    GlobalDialog.channel2Sizer = new SpacedHorizontalSizer();
+    GlobalDialog.channel3Sizer = new SpacedHorizontalSizer();
 
-    dialog.channel1Label = new Label(dialog);
-    dialog.channel1Label.text = "R";
-    dialog.channel2Label = new Label(dialog);
-    dialog.channel2Label.text = "G";
-    dialog.channel3Label = new Label(dialog);
-    dialog.channel3Label.text = "B";
+    GlobalDialog.channel1Label = new Label(GlobalDialog);
+    GlobalDialog.channel1Label.text = "R";
+    GlobalDialog.channel2Label = new Label(GlobalDialog);
+    GlobalDialog.channel2Label.text = "G";
+    GlobalDialog.channel3Label = new Label(GlobalDialog);
+    GlobalDialog.channel3Label.text = "B";
 
-    dialog.channel1ComboBox = new ComboBox(dialog);
-    with (dialog.channel1ComboBox) {
+    GlobalDialog.channel1ComboBox = new ComboBox(GlobalDialog);
+    with (GlobalDialog.channel1ComboBox) {
         editEnabled = false;
         bindings = function () {
-            let hasLiveRgbStack = dialog.findControlInTabBox("Live RGB Stack") != null;
-            for (let i = hasLiveRgbStack ? 1 : 0; i < dialog.tabBox.numberOfPages; i++) {
+            let hasLiveRgbStack = GlobalDialog.findControlInTabBox("Live RGB Stack") != null;
+            for (let i = hasLiveRgbStack ? 1 : 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
                 let number = hasLiveRgbStack ? i - 1 : i;
-                let label = number + ":" + dialog.tabBox.pageLabel(i);
-                if (dialog.tabBox.pageControlByIndex(i).stack.isCFA) continue;
+                let label = number + ":" + GlobalDialog.tabBox.pageLabel(i);
+                if (GlobalDialog.tabBox.pageControlByIndex(i).stack.isCFA) continue;
                 if (this.findItem(label) == -1) {
                     this.addItem(label);
                 }
             }
-            this.enabled = !dialog.isColorStacking;
+            this.enabled = !GlobalDialog.isColorStacking;
         }
     }
 
-    dialog.channel2ComboBox = new ComboBox(dialog);
-    with (dialog.channel2ComboBox) {
+    GlobalDialog.channel2ComboBox = new ComboBox(GlobalDialog);
+    with (GlobalDialog.channel2ComboBox) {
         editEnabled = false;
         bindings = function () {
-            let hasLiveRgbStack = dialog.findControlInTabBox("Live RGB Stack") != null;
-            for (let i = hasLiveRgbStack ? 1 : 0; i < dialog.tabBox.numberOfPages; i++) {
+            let hasLiveRgbStack = GlobalDialog.findControlInTabBox("Live RGB Stack") != null;
+            for (let i = hasLiveRgbStack ? 1 : 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
                 let number = hasLiveRgbStack ? i - 1 : i;
-                let label = number + ":" + dialog.tabBox.pageLabel(i);
-                if (dialog.tabBox.pageControlByIndex(i).stack.isCFA) continue;
+                let label = number + ":" + GlobalDialog.tabBox.pageLabel(i);
+                if (GlobalDialog.tabBox.pageControlByIndex(i).stack.isCFA) continue;
                 if (this.findItem(label) == -1) {
                     this.addItem(label);
                 }
             }
-            this.enabled = !dialog.isColorStacking;
+            this.enabled = !GlobalDialog.isColorStacking;
         }
     }
 
-    dialog.channel3ComboBox = new ComboBox(dialog);
-    with (dialog.channel3ComboBox) {
+    GlobalDialog.channel3ComboBox = new ComboBox(GlobalDialog);
+    with (GlobalDialog.channel3ComboBox) {
         editEnabled = false;
         bindings = function () {
-            let hasLiveRgbStack = dialog.findControlInTabBox("Live RGB Stack") != null;
-            for (let i = hasLiveRgbStack ? 1 : 0; i < dialog.tabBox.numberOfPages; i++) {
+            let hasLiveRgbStack = GlobalDialog.findControlInTabBox("Live RGB Stack") != null;
+            for (let i = hasLiveRgbStack ? 1 : 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
                 let number = hasLiveRgbStack ? i - 1 : i;
-                let label = number + ":" + dialog.tabBox.pageLabel(i);
-                if (dialog.tabBox.pageControlByIndex(i).stack.isCFA) continue;
+                let label = number + ":" + GlobalDialog.tabBox.pageLabel(i);
+                if (GlobalDialog.tabBox.pageControlByIndex(i).stack.isCFA) continue;
                 if (this.findItem(label) == -1) {
                     this.addItem(label);
                 }
             }
-            this.enabled = !dialog.isColorStacking;
+            this.enabled = !GlobalDialog.isColorStacking;
         }
     }
 
-    dialog.channel1Sizer.addItem(dialog.channel1Label);
-    dialog.channel1Sizer.addItem(dialog.channel1ComboBox);
-    dialog.channel2Sizer.addItem(dialog.channel2Label);
-    dialog.channel2Sizer.addItem(dialog.channel2ComboBox);
-    dialog.channel3Sizer.addItem(dialog.channel3Label);
-    dialog.channel3Sizer.addItem(dialog.channel3ComboBox);
+    GlobalDialog.channel1Sizer.addItem(GlobalDialog.channel1Label);
+    GlobalDialog.channel1Sizer.addItem(GlobalDialog.channel1ComboBox);
+    GlobalDialog.channel2Sizer.addItem(GlobalDialog.channel2Label);
+    GlobalDialog.channel2Sizer.addItem(GlobalDialog.channel2ComboBox);
+    GlobalDialog.channel3Sizer.addItem(GlobalDialog.channel3Label);
+    GlobalDialog.channel3Sizer.addItem(GlobalDialog.channel3ComboBox);
 
-    dialog.startColorStackButton = new PushButton(dialog)
-    with (dialog.startColorStackButton) {
+    GlobalDialog.startColorStackButton = new PushButton(GlobalDialog)
+    with (GlobalDialog.startColorStackButton) {
         bindings = function () {
-            this.text = getValueOrDefault(dialog.isColorStacking, false) ? "Stop RGB stacking" : "Start RGB stacking";
-            this.icon = getValueOrDefault(dialog.isColorStacking, false) ? dialog.scaledResource(":/icons/delete.png") : dialog.scaledResource(":/icons/ok.png");
-            this.onClick = getValueOrDefault(dialog.isColorStacking, false) ?
+            this.text = getValueOrDefault(GlobalDialog.isColorStacking, false) ? "Stop RGB stacking" : "Start RGB stacking";
+            this.icon = getValueOrDefault(GlobalDialog.isColorStacking, false) ? GlobalDialog.scaledResource(":/icons/delete.png") : GlobalDialog.scaledResource(":/icons/ok.png");
+            this.onClick = getValueOrDefault(GlobalDialog.isColorStacking, false) ?
                 function () {
                     this.hasFocus = false;
-                    dialog.isColorStacking = false;
+                    GlobalDialog.isColorStacking = false;
                 }
                 : function () {
                     this.hasFocus = false;
-                    dialog.isColorStacking = true;
-                    dialog.addColorStack();
+                    GlobalDialog.isColorStacking = true;
+                    GlobalDialog.addColorStack();
                 }
         }
     }
 
-    dialog.scnrCheckBox = new CheckBox(dialog);
-    with(dialog.scnrCheckBox) {
+    GlobalDialog.scnrCheckBox = new CheckBox(GlobalDialog);
+    with(GlobalDialog.scnrCheckBox) {
         text = "Apply SCNR Green";
         bindings = function() {
-            this.checked = dialog.doScnr;
+            this.checked = GlobalDialog.doScnr;
         }
         onCheck = function(value) {
             this.hasFocus = false;
-            dialog.doScnr = value;
+            GlobalDialog.doScnr = value;
         }
     }
 
-    dialog.colorStackControl = new Control(dialog);
-    with (dialog.colorStackControl) {
+    GlobalDialog.colorStackControl = new Control(GlobalDialog);
+    with (GlobalDialog.colorStackControl) {
         sizer = new SpacedVerticalSizer;
-        sizer.addItem(dialog.channel1Sizer);
-        sizer.addItem(dialog.channel2Sizer);
-        sizer.addItem(dialog.channel3Sizer);
-        sizer.addItem(dialog.scnrCheckBox);
-        sizer.addItem(dialog.startColorStackButton);
+        sizer.addItem(GlobalDialog.channel1Sizer);
+        sizer.addItem(GlobalDialog.channel2Sizer);
+        sizer.addItem(GlobalDialog.channel3Sizer);
+        sizer.addItem(GlobalDialog.scnrCheckBox);
+        sizer.addItem(GlobalDialog.startColorStackButton);
         hide();
     }
 
-    dialog.colorStackSectionBar = new SectionBar(dialog);
-    with (dialog.colorStackSectionBar) {
+    GlobalDialog.colorStackSectionBar = new SectionBar(GlobalDialog);
+    with (GlobalDialog.colorStackSectionBar) {
         setTitle("4. Live RGB Stack");
-        setSection(dialog.colorStackControl);
+        setSection(GlobalDialog.colorStackControl);
         bindings = function() {
-            this.enabled = dialog.tabBox.numberOfPages >= 2;
+            this.enabled = GlobalDialog.tabBox.numberOfPages >= 2;
         }
     }
 
     // #endregion RGBStack
 
-    dialog.mainControlReplacement = new Control(dialog);
-    with (dialog.mainControlReplacement) {
+    GlobalDialog.mainControlReplacement = new Control(GlobalDialog);
+    with (GlobalDialog.mainControlReplacement) {
         sizer = new SpacedVerticalSizer();
-        sizer.addItem(dialog.addStackGroupBox);
-        sizer.addItem(dialog.integrationOptionsSectionBar);
-        sizer.addItem(dialog.fullCalibrationControl);
-        sizer.addItem(dialog.monitoringGroupBox);
-        sizer.addItem(dialog.colorStackSectionBar);
-        sizer.addItem(dialog.colorStackControl);
+        sizer.addItem(GlobalDialog.addStackGroupBox);
+        sizer.addItem(GlobalDialog.integrationOptionsSectionBar);
+        sizer.addItem(GlobalDialog.fullCalibrationControl);
+        sizer.addItem(GlobalDialog.monitoringGroupBox);
+        sizer.addItem(GlobalDialog.colorStackSectionBar);
+        sizer.addItem(GlobalDialog.colorStackControl);
         bindings = function () {
-            this.enabled = !isProcessing();
+            this.enabled = !JobStack.isProcessing();
         }
     }
 
-    dialog.controlSizer.insertItem(3, dialog.mainControlReplacement);
+    GlobalDialog.controlSizer.insertItem(3, GlobalDialog.mainControlReplacement);
 
-    dialog.controlSizer.removeItem(dialog.mainControl);
-    dialog.mainControl.hide();
+    GlobalDialog.controlSizer.removeItem(GlobalDialog.mainControl);
+    GlobalDialog.mainControl.hide();
 
-    dialog.runEverythingButton.text = "Export All Live Stacks";
-    dialog.runEverythingButton.onClick = function () {
-        if (dialog.showWarningDialog("Exporting will close the script. You can reload the stack later into the script and continue from there. Do you want to continue?", "OK to continue?", "Continue", true)) {
-            dialog.ok();
+    GlobalDialog.runEverythingButton.text = "Export All Live Stacks";
+    GlobalDialog.runEverythingButton.onClick = function () {
+        if (GlobalDialog.showWarningDialog("Exporting will close the script. You can reload the stack later into the script and continue from there. Do you want to continue?", "OK to continue?", "Continue", true)) {
+            GlobalDialog.ok();
         }
     }
-    dialog.runEverythingButton.bindings = function () {
-        this.enabled = dialog.tabBox.numberOfPages > 0 && !isProcessing();
+    GlobalDialog.runEverythingButton.bindings = function () {
+        this.enabled = GlobalDialog.tabBox.numberOfPages > 0 && !JobStack.isProcessing();
     }
-    dialog.runAndCloseGroupBox.bindings = function () {
-        this.enabled = dialog.tabBox.numberOfPages > 0 && !isProcessing();
+    GlobalDialog.runAndCloseGroupBox.bindings = function () {
+        this.enabled = GlobalDialog.tabBox.numberOfPages > 0 && !JobStack.isProcessing();
     }
 
-    dialog.tabBox.bindings = function() {
+    GlobalDialog.tabBox.bindings = function() {
         for(let i = 0;i<this.numberOfPages;i++) {
             let stack = this.pageControlByIndex(i).stack;
             if(stack.isProcessingFiles) {
-                this.setPageIcon(i, dialog.triangleIcon);
+                this.setPageIcon(i, GlobalDialog.triangleIcon);
             } else if(stack.watchingFolder) {
-                this.setPageIcon(i, dialog.ballIcon);
+                this.setPageIcon(i, GlobalDialog.ballIcon);
             } else {
-                this.setPageIcon(i, dialog.squareIcon);
+                this.setPageIcon(i, GlobalDialog.squareIcon);
             }
         }
     }
 
-    dialog.squareIcon = new Bitmap(dialog.scaledResource(":/bullets/bullet-square-red.png"));
-    dialog.triangleIcon = new Bitmap(dialog.scaledResource(":/bullets/bullet-triangle-green.png"));
-    dialog.ballIcon = new Bitmap(dialog.scaledResource(":/bullets/bullet-ball-blue.png"));
+    GlobalDialog.squareIcon = new Bitmap(GlobalDialog.scaledResource(":/bullets/bullet-square-red.png"));
+    GlobalDialog.triangleIcon = new Bitmap(GlobalDialog.scaledResource(":/bullets/bullet-triangle-green.png"));
+    GlobalDialog.ballIcon = new Bitmap(GlobalDialog.scaledResource(":/bullets/bullet-ball-blue.png"));
 
-    dialog.control.setScaledMaxWidth(300);
-    dialog.control.setScaledMinWidth(300);
-    dialog.setScaledMinSize(300, 300)
-    dialog.adjustToContents();
+    GlobalDialog.control.setScaledMaxWidth(300);
+    GlobalDialog.control.setScaledMinWidth(300);
+    GlobalDialog.setScaledMinSize(300, 300)
+    GlobalDialog.adjustToContents();
 
-    dialog.loadInitialView = function() { }
+    GlobalDialog.loadInitialView = function() { }
 }
 
 main();

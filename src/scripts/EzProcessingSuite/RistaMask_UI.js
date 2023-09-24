@@ -170,7 +170,7 @@ function generateProcessingInfo() {
 }
 
 function execute(window, bringToFront = true, runOnMain = false) {
-	writeMessageStart("Running " + NAME)
+	ConsoleWriter.writeMessageStart("Running " + NAME)
 	createMasks();
 
 	if(bringToFront) {
@@ -183,19 +183,19 @@ function execute(window, bringToFront = true, runOnMain = false) {
 
 	let workingView = window.mainView;
 
-	let runningOnPreview = workingView.id != CurrentProcessingInfo.workingViewId;
+	let runningOnPreview = workingView.id !== CurrentProcessingInfo.workingViewId;
 
 	if (runningOnPreview && !runOnMain) {
 		workingView = cloneView(View.viewById(CurrentProcessingInfo.workingViewId), "_ez_temp_working_" + CurrentProcessingInfo.mainViewId);
 	}
 
-	if (CurrentProcessingInfo.runTgv == true) {
+	if (CurrentProcessingInfo.runTgv === true) {
 		if(CurrentProcessingInfo.runOnFullImage != null && CurrentProcessingInfo.runOnFullImage) {
 			window.currentView = window.mainView;
 		}
-		writeMessageStart("Running Denoise");
+		ConsoleWriter.writeMessageStart("Running Denoise");
 		workingView = doTgv(workingView, View.viewById(CurrentProcessingInfo.workingViewId).isPreview && !runOnMain);
-		writeMessageEnd("Denoise done");
+		ConsoleWriter.writeMessageEnd("Denoise done");
 	}
 
 	// clean up L clone for RGB
@@ -203,7 +203,7 @@ function execute(window, bringToFront = true, runOnMain = false) {
 		TgvLCloneView.window.forceClose();
 	}
 
-	writeMessageEnd("Finished");
+	ConsoleWriter.writeMessageEnd("Finished");
 	return workingView;
 }
 
@@ -214,7 +214,7 @@ function doTgv(view, isPreview) {
 	let workingWindow = view.window;
 
 	if (!CurrentProcessingInfo.tgvNoiseEvaluation) {
-		writeMessageBlock("Calcuating stdDev of Background Preview " + CurrentProcessingInfo.tgvBackgroundReference);
+		ConsoleWriter.writeMessageBlock("Calcuating stdDev of Background Preview " + CurrentProcessingInfo.tgvBackgroundReference);
 		let backgroundReference = View.viewById(CurrentProcessingInfo.tgvBackgroundReference);
 
 		if(!backgroundReference.image.isColor) {
@@ -237,7 +237,7 @@ function doTgv(view, isPreview) {
 	// it's not possible to apply multiple processes on a preview otherwise
 	// also clone all masks to have the correct sizes
 	if(isPreview && (CurrentProcessingInfo.tgvCreateProcessOnly == null || !CurrentProcessingInfo.tgvCreateProcessOnly)) {
-		writeMessageBlock("Creating Preview clones");
+		ConsoleWriter.writeMessageBlock("Creating Preview clones");
 		let window = View.viewById(CurrentProcessingInfo.mainViewId).window;
 		let mainWorkingView = View.viewById(CurrentProcessingInfo.workingViewId);
 		workingWindow = cloneView(view, "TGVPreview").window;
@@ -255,7 +255,7 @@ function doTgv(view, isPreview) {
 		workingWindow.bringToFront();
 	}
 
-	writeMessageBlock("Calculated noise estimation (does not include multiplier): " + calculatedStdDev);
+	ConsoleWriter.writeMessageBlock("Calculated noise estimation (does not include multiplier): " + calculatedStdDev);
 
 	CurrentProcessingInfo.tgvEdgeProtection = calculatedStdDev * CurrentProcessingInfo.tgvEdgeProtectionMultiplier;
 
@@ -276,7 +276,7 @@ function doTgv(view, isPreview) {
 	tgv.maxIterationsL = CurrentProcessingInfo.tgvIterations;
 
 	if (CurrentProcessingInfo.tgvCreateProcessOnly != null && CurrentProcessingInfo.tgvCreateProcessOnly) {
-		writeMessageBlock("Running TGVDenoise");
+		ConsoleWriter.writeMessageBlock("Running TGVDenoise");
 		tgv.launch();
 	} else {
 		tgv.executeOn(workingWindow.currentView);
@@ -284,7 +284,7 @@ function doTgv(view, isPreview) {
 
 	// exec mmt based on default mmt strong settings
 	if (CurrentProcessingInfo.runMmt) {
-		writeMessageBlock("Running MultiscaleMedianTransform");
+		ConsoleWriter.writeMessageBlock("Running MultiscaleMedianTransform");
 		workingWindow.setMask(workingMmtMaskView.window);
 		workingWindow.maskInverted = true;
 
@@ -343,7 +343,7 @@ function doTgv(view, isPreview) {
 
 // creation of all necessary masks based on current window
 function createMasks() {
-	writeMessageStart("Creating masks");
+	ConsoleWriter.writeMessageStart("Creating masks");
 	let workingView = View.viewById(CurrentProcessingInfo.mainViewId);
 
 	if(workingView.image.isColor) {
@@ -352,22 +352,22 @@ function createMasks() {
 	}
 
 	//create intermediate image and apply STF
-	writeMessageBlock("Creating TGVSupport");
+	ConsoleWriter.writeMessageBlock("Creating TGVSupport");
 	TgvSupportView = cloneView(workingView, "_ez_TGVSupport_" + CurrentProcessingInfo.mainViewId);
 	doSTF(TgvSupportView)
 	doHistogramTransformation(TgvSupportView);
 
 	//Make the MMT Mask
-	writeMessageBlock("Creating MMTMask");
+	ConsoleWriter.writeMessageBlock("Creating MMTMask");
 	TgvMmtMaskView = cloneView(TgvSupportView, "_ez_MMTMask_" + CurrentProcessingInfo.mainViewId);
 	stretchToValue(TgvMmtMaskView, CurrentProcessingInfo.tgvMmtMaskMean);
 
 	//Make TGV Mask
-	writeMessageBlock("Creating TGVMask");
+	ConsoleWriter.writeMessageBlock("Creating TGVMask");
 	TgvMaskView = cloneView(TgvSupportView, "_ez_TGVMask_" + CurrentProcessingInfo.mainViewId);
 	applyCT(TgvMaskView, CurrentProcessingInfo.tgvContrastLow, CurrentProcessingInfo.tgvContrastHigh);
 	stretchToValue(TgvMaskView, CurrentProcessingInfo.tgvMaskMean);
-	writeMessageEnd("Masks created");
+	ConsoleWriter.writeMessageEnd("Masks created");
 }
 
 // applies curves to masks
@@ -380,16 +380,16 @@ function applyCT(view, low, high) {
 
 
 function customizeDialog() {
-	dialog.infoBox.text = "<b>RistaMask / EZ Denoise:</b> A script to efficiently create masks and perform automatical noise reduction based on the method described by Jon Rista. The script is meant to be used on a linear image, directly after background modelization, color calibration and deconvolution."
-	dialog.allowPreviews();
+	GlobalDialog.infoBox.text = "<b>RistaMask / EZ Denoise:</b> A script to efficiently create masks and perform automatical noise reduction based on the method described by Jon Rista. The script is meant to be used on a linear image, directly after background modelization, color calibration and deconvolution."
+	GlobalDialog.allowPreviews();
 
-	dialog.bindings = null;
+	GlobalDialog.bindings = null;
 
-	dialog.tutorialPrerequisites = [
+	GlobalDialog.tutorialPrerequisites = [
 		"Image is cropped properly",
 		"Image is not stretched (image is linear)"
 	];
-	dialog.tutorialSteps = ["Select image or preview to apply to",
+	GlobalDialog.tutorialSteps = ["Select image or preview to apply to",
 		"If you just want to make masks for TGV Denoise select 'Create Masks Only'",
 		"Otherwise it is recommended to select a preview in your image",
 		"Run evaluation and check the results, it is recommended to run evaluation at about 250 iterations. However 250 iterations are not fully representative.",
@@ -399,14 +399,14 @@ function customizeDialog() {
 		"Once satisfied with preview results it is recommended to apply it to the whole image with the button on the right while adjusting the iterations to 1000-1500",
 	];
 	
-	dialog.onEvaluateButton.show();
+	GlobalDialog.onEvaluateButton.show();
 
 
-	dialog.onExit = function() { }
+	GlobalDialog.onExit = function() { }
 
-	dialog.onEvaluate = function () {
+	GlobalDialog.onEvaluate = function () {
 		// take original image
-		let orgControl = dialog.tabBox.pageControlByIndex(0);
+		let orgControl = GlobalDialog.tabBox.pageControlByIndex(0);
 		let orgWindow = orgControl.previewFrameWindow;
 
 		// clone it
@@ -417,13 +417,13 @@ function customizeDialog() {
 		clone.window.forceClose();
 
 		// assign it to control
-		let previewControl = new PreviewControl(dialog, true, true);
+		let previewControl = new PreviewControl(GlobalDialog, true, true);
 
 		previewControl.swap = function () {
-			dialog.tabBox.currentPageIndex = 0;
+			GlobalDialog.tabBox.currentPageIndex = 0;
 		}
 
-		previewControl.STF = dialog.tabBox.pageControlByIndex(0).STF;
+		previewControl.STF = GlobalDialog.tabBox.pageControlByIndex(0).STF;
 		previewControl.SetView(ranClone, true);
 		ranClone.window.forceClose();
 
@@ -440,17 +440,17 @@ function customizeDialog() {
 		closeButton.onClick = function () {
 			previewControl.dispose();
 			let index = 0;
-			for (let i = 0; i < dialog.tabBox.numberOfPages; i++) {
-				if (dialog.tabBox.pageControlByIndex(i) === previewControl) {
+			for (let i = 0; i < GlobalDialog.tabBox.numberOfPages; i++) {
+				if (GlobalDialog.tabBox.pageControlByIndex(i) === previewControl) {
 					index = i;
 					break;
 				}
 			}
-			dialog.tabBox.removePage(index);
+			GlobalDialog.tabBox.removePage(index);
 		}
 		previewControl.infoFrame.sizer.insertItem(1, closeButton);
 
-		dialog.tabBox.addPage(previewControl, "Denoise Run " + (++CurrentProcessingInfo.denoiseRun));
+		GlobalDialog.tabBox.addPage(previewControl, "Denoise Run " + (++CurrentProcessingInfo.denoiseRun));
 		previewControl.SetProcessingInfo(CurrentProcessingInfo, "Denoise Run " + (CurrentProcessingInfo.denoiseRun));
 
 		previewControl.iterTextBox = new NumericControl(previewControl);
@@ -469,7 +469,7 @@ function customizeDialog() {
 		}
 		previewControl.applyGroupBox.sizer.insertItem(0, previewControl.iterTextBox);
 
-		dialog.tabBox.currentPageIndex = dialog.tabBox.numberOfPages - 1;
+		GlobalDialog.tabBox.currentPageIndex = GlobalDialog.tabBox.numberOfPages - 1;
 
 		TgvMaskView.window.forceClose();
 		TgvSupportView.window.forceClose();
@@ -481,71 +481,71 @@ function customizeDialog() {
 		TgvLCloneView = null;
 	}
 
-	dialog.addMainControl = function (viewId, expand) {
-		let previewControl = new PreviewControl(dialog, true, true);
+	GlobalDialog.addMainControl = function (viewId, expand) {
+		let previewControl = new PreviewControl(GlobalDialog, true, true);
 
 		previewControl.swap = function () {
-			dialog.tabBox.currentPageIndex = dialog.tabBox.numberOfPages - 1;
+			GlobalDialog.tabBox.currentPageIndex = GlobalDialog.tabBox.numberOfPages - 1;
 		}
 
 		previewControl.SetView(View.viewById(viewId));
 
 		let swapToLatestButton = new PushButton(previewControl);
 		swapToLatestButton.bindings = function() {
-			swapToLatestButton.text = "Change Tab to " + dialog.tabBox.pageLabel(dialog.tabBox.numberOfPages-1);
+			swapToLatestButton.text = "Change Tab to " + GlobalDialog.tabBox.pageLabel(GlobalDialog.tabBox.numberOfPages-1);
 		}
 		swapToLatestButton.onClick = function () {
 			previewControl.swap.call(previewControl);
 		}
 		previewControl.infoFrame.sizer.insertItem(0, swapToLatestButton);
 
-		dialog.tabBox.insertPage(0, previewControl, CurrentProcessingInfo.workingViewId);
+		GlobalDialog.tabBox.insertPage(0, previewControl, CurrentProcessingInfo.workingViewId);
 
-		dialog.tabBox.show();
+		GlobalDialog.tabBox.show();
 	}
 
-	dialog.onSelectedMainView = function(newMainViewId, prevMainViewId) {
+	GlobalDialog.onSelectedMainView = function(newMainViewId, prevMainViewId) {
 		if (prevMainViewId != CurrentProcessingInfo.mainViewId) {
-			for (let i = dialog.tabBox.numberOfPages - 1; i >= 0; i--) {
-				dialog.tabBox.pageControlByIndex(i).dispose();
-				dialog.tabBox.removePage(i);
+			for (let i = GlobalDialog.tabBox.numberOfPages - 1; i >= 0; i--) {
+				GlobalDialog.tabBox.pageControlByIndex(i).dispose();
+				GlobalDialog.tabBox.removePage(i);
 			}
 		} else {
 			try {
-				dialog.tabBox.pageControlByIndex(0).dispose();
-				dialog.tabBox.removePage(0);
+				GlobalDialog.tabBox.pageControlByIndex(0).dispose();
+				GlobalDialog.tabBox.removePage(0);
 			} catch (e) { }
 		}
 
-		dialog.addMainControl(CurrentProcessingInfo.workingViewId);
-		if(prevMainViewId == null) dialog.width *= 3;
-		dialog.tabBox.currentPageIndex = 0;
+		GlobalDialog.addMainControl(CurrentProcessingInfo.workingViewId);
+		if(prevMainViewId == null) GlobalDialog.width *= 3;
+		GlobalDialog.tabBox.currentPageIndex = 0;
 	}
 
-	dialog.onEmptyMainView = function () {
-		for (let i = dialog.tabBox.numberOfPages - 1; i >= 0; i--) {
-			dialog.tabBox.pageControlByIndex(i).dispose();
-			dialog.tabBox.removePage(i);
+	GlobalDialog.onEmptyMainView = function () {
+		for (let i = GlobalDialog.tabBox.numberOfPages - 1; i >= 0; i--) {
+			GlobalDialog.tabBox.pageControlByIndex(i).dispose();
+			GlobalDialog.tabBox.removePage(i);
 		}
 
-		dialog.tabBox.hide();
-		dialog.adjustToContents();
+		GlobalDialog.tabBox.hide();
+		GlobalDialog.adjustToContents();
 	}
 
 
-	dialog.canEvaluate = function() {
-		return dialog.canRun();
+	GlobalDialog.canEvaluate = function() {
+		return GlobalDialog.canRun();
 	}
 
-	dialog.canRun = function() {
+	GlobalDialog.canRun = function() {
 		return ((CurrentProcessingInfo.tgvBackgroundReference != null)
 			|| CurrentProcessingInfo.tgvNoiseEvaluation == true)
 			&& CurrentProcessingInfo.runTgv
 			&& CurrentProcessingInfo.mainViewId != null;
 	}
 	// #region "Mask"
-	dialog.tgvTargetMeanSlider = new NumericControl(dialog);
-	with (dialog.tgvTargetMeanSlider) {
+	GlobalDialog.tgvTargetMeanSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.tgvTargetMeanSlider) {
 		label.text = "Target mean";
 		label.scaledMinWidth = 100;
 		setRange(0.25, 0.75);
@@ -561,8 +561,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.tgvContrastLowSlider = new NumericControl(dialog);
-	with (dialog.tgvContrastLowSlider) {
+	GlobalDialog.tgvContrastLowSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.tgvContrastLowSlider) {
 		toolTip = "Linear curves transformation will be applied. The low parameter represents the what value 0 will be mapped to, the high parameter represents what 1 will be mapped to.";
 		label.text = "Contrast low";
 		label.scaledMinWidth = 100;
@@ -578,8 +578,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.tgvContrastHighSlider = new NumericControl(dialog);
-	with (dialog.tgvContrastHighSlider) {
+	GlobalDialog.tgvContrastHighSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.tgvContrastHighSlider) {
 		toolTip = "Linear curves transformation will be applied. The low parameter represents the what value 0 will be mapped to, the high parameter represents what 1 will be mapped to.";
 		label.text = "Contrast high";
 		label.scaledMinWidth = 100;
@@ -595,8 +595,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.mmtTargetMeanSlider = new NumericControl(dialog);
-	with (dialog.mmtTargetMeanSlider) {
+	GlobalDialog.mmtTargetMeanSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtTargetMeanSlider) {
 		toolTip = "Target mean value of the mask for MultiscaleMedianTransform";
 		label.text = "Target mean";
 		label.scaledMinWidth = 100;
@@ -613,31 +613,31 @@ function customizeDialog() {
 	}
 
 
-	let mmtGroupBox = new GroupBox(dialog);
+	let mmtGroupBox = new GroupBox(GlobalDialog);
 	with(mmtGroupBox) {
 		title = "MultiscaleMedianTransform mask settings";
 		sizer = new VerticalSizer;
 		sizer.scaledSpacing = 5;
 		sizer.scaledMargin = 5;
-		sizer.addItem(dialog.mmtTargetMeanSlider);
+		sizer.addItem(GlobalDialog.mmtTargetMeanSlider);
 	}
 
-	let tgvGroupBox = new GroupBox(dialog);
+	let tgvGroupBox = new GroupBox(GlobalDialog);
 	with(tgvGroupBox) {
 		title = "TGVDenoise mask settings";
 		sizer = new VerticalSizer;
 		sizer.scaledSpacing = 5;
 		sizer.scaledMargin = 5;
-		sizer.addItem(dialog.tgvTargetMeanSlider);
-		sizer.addItem(dialog.tgvContrastLowSlider);
-		sizer.addItem(dialog.tgvContrastHighSlider);
+		sizer.addItem(GlobalDialog.tgvTargetMeanSlider);
+		sizer.addItem(GlobalDialog.tgvContrastLowSlider);
+		sizer.addItem(GlobalDialog.tgvContrastHighSlider);
 	}
 
-	dialog.resetMaskSettingsButton = new PushButton(dialog);
-	with (dialog.resetMaskSettingsButton) {
+	GlobalDialog.resetMaskSettingsButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.resetMaskSettingsButton) {
 		text = "Reset Mask Settings";
 		toolTip = "Reset TGV to default settings";
-		icon = dialog.scaledResource(":/icons/debug-restart.png");
+		icon = GlobalDialog.scaledResource(":/icons/debug-restart.png");
 		onClick = function () {
 			CurrentProcessingInfo.tgvMaskMean = 0.5;
 			CurrentProcessingInfo.tgvContrastLow = 0.25;
@@ -646,20 +646,20 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.maskControlSizer = new VerticalSizer;
-	dialog.maskControlSizer.spacing = 6;
-	dialog.maskControlSizer.margin = 6;
-	dialog.maskControlSizer.addItem(tgvGroupBox);
-	dialog.maskControlSizer.addItem(mmtGroupBox);
-	dialog.maskControlSizer.addItem(dialog.resetMaskSettingsButton);
-	dialog.maskControlSizer.addStretch();
+	GlobalDialog.maskControlSizer = new VerticalSizer;
+	GlobalDialog.maskControlSizer.spacing = 6;
+	GlobalDialog.maskControlSizer.margin = 6;
+	GlobalDialog.maskControlSizer.addItem(tgvGroupBox);
+	GlobalDialog.maskControlSizer.addItem(mmtGroupBox);
+	GlobalDialog.maskControlSizer.addItem(GlobalDialog.resetMaskSettingsButton);
+	GlobalDialog.maskControlSizer.addStretch();
 	let maskControl = new Frame;
-	maskControl.sizer = dialog.maskControlSizer;
+	maskControl.sizer = GlobalDialog.maskControlSizer;
 
 	// #endregion "Mask"
 
 	// #region "TGV"
-	let nrDisclaimer = new Label(dialog);
+	let nrDisclaimer = new Label(GlobalDialog);
 	with (nrDisclaimer) {
 		frameStyle = FrameStyle_Box;
 		wordWrapping = true;
@@ -668,7 +668,7 @@ function customizeDialog() {
 		text = "Either select a preview of pure background (no stars or objects) or use the NoiseEvaluation script option instead for an estimation of the background noise if you want to perform automatic noise reduction."
 	}
 
-	let tgvControl = new GroupBox(dialog);
+	let tgvControl = new GroupBox(GlobalDialog);
 	tgvControl.sizer = new VerticalSizer;
 	tgvControl.sizer.scaledSpacing = 4;
 	tgvControl.sizer.scaledMargin = 10;
@@ -681,8 +681,8 @@ function customizeDialog() {
 		CurrentProcessingInfo.runTgv = value;
 	}
 
-	dialog.tgvBackgroundViewSelector = new ViewList(dialog);
-	with (dialog.tgvBackgroundViewSelector) {
+	GlobalDialog.tgvBackgroundViewSelector = new ViewList(GlobalDialog);
+	with (GlobalDialog.tgvBackgroundViewSelector) {
 		toolTip = "Select a preview that contains only background. It doesn't need to be big but it can not contain any stars or objects.";
 		onViewSelected = function (value) {
 			CurrentProcessingInfo.tgvBackgroundReference = (value == null || value.isNull) ? null : value.fullId;
@@ -695,18 +695,18 @@ function customizeDialog() {
 		getAll();
 	}
 
-	let bgLabel = new Label(dialog);
+	let bgLabel = new Label(GlobalDialog);
 	bgLabel.text = "Background Reference";
 	let tgvBackgroundSizer = new HorizontalSizer;
 	tgvBackgroundSizer.addItem(bgLabel);
-	tgvBackgroundSizer.addItem(dialog.tgvBackgroundViewSelector);
+	tgvBackgroundSizer.addItem(GlobalDialog.tgvBackgroundViewSelector);
 
 	let tgvDenoiseLabel = new Label;
 	tgvDenoiseLabel.text = "Denoise Support";
 	tgvDenoiseLabel.textAlignment = 2;
 
-	dialog.tgvDenoiseSupport = new SpinBox(dialog);
-	with (dialog.tgvDenoiseSupport) {
+	GlobalDialog.tgvDenoiseSupport = new SpinBox(GlobalDialog);
+	with (GlobalDialog.tgvDenoiseSupport) {
 		setRange(0,3);
 		bindings = function() {
 			value = CurrentProcessingInfo.tgvDenoiseSupport;
@@ -718,11 +718,11 @@ function customizeDialog() {
 
 	let tgvDenoiseSizer = new HorizontalSizer;
 	tgvDenoiseSizer.addItem(tgvDenoiseLabel);
-	tgvDenoiseSizer.addItem(dialog.tgvDenoiseSupport);
+	tgvDenoiseSizer.addItem(GlobalDialog.tgvDenoiseSupport);
 	tgvDenoiseSizer.scaledSpacing = 5;
 
-	dialog.tgvStrengthSlider = new NumericControl(dialog);
-	with (dialog.tgvStrengthSlider) {
+	GlobalDialog.tgvStrengthSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.tgvStrengthSlider) {
 		label.text = "Strength";
 		label.scaledMinWidth = 100;
 		setRange(0.01, 20);
@@ -738,8 +738,8 @@ function customizeDialog() {
 		edit.scaledMinWidth = 100;
 	}
 
-	dialog.tgvSmoothnessSlider = new NumericControl(dialog);
-	with (dialog.tgvSmoothnessSlider) {
+	GlobalDialog.tgvSmoothnessSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.tgvSmoothnessSlider) {
 		label.text = "Smoothness";
 		label.scaledMinWidth = 100;
 		setRange(0.01, 20);
@@ -755,8 +755,8 @@ function customizeDialog() {
 		edit.scaledMinWidth = 100;
 	}
 
-	dialog.tgvIterationsSlider = new NumericControl(dialog);
-	with (dialog.tgvIterationsSlider) {
+	GlobalDialog.tgvIterationsSlider = new NumericControl(GlobalDialog);
+	with (GlobalDialog.tgvIterationsSlider) {
 		label.text = "Iterations";
 		label.scaledMinWidth = 100;
 		setRange(100, 5000);
@@ -773,7 +773,7 @@ function customizeDialog() {
 	}
 
 	// denoise edge protection detection
-	let noiseScriptCheckbox = new CheckBox(dialog);
+	let noiseScriptCheckbox = new CheckBox(GlobalDialog);
 	with (noiseScriptCheckbox) {
 		text = "Use NoiseEvaluation script instead of preview";
 		toolTip = "Alternative to the noise evaluation using a manually set preview";
@@ -785,7 +785,7 @@ function customizeDialog() {
 		}
 	}
 
-	let tgvStdevMultiplierSlider = new NumericControl(dialog);
+	let tgvStdevMultiplierSlider = new NumericControl(GlobalDialog);
 	with (tgvStdevMultiplierSlider) {
 		label.text = "Edge protection multiplier";
 		toolTip = "If you find the edge protection value too high/low you can alter it here. Higher values result in LESS edge protection, lower values result in higher protection."
@@ -802,7 +802,7 @@ function customizeDialog() {
 		}
 	}
 
-	let tgvEdgeProtectionGroupBox = new GroupBox(dialog);
+	let tgvEdgeProtectionGroupBox = new GroupBox(GlobalDialog);
 	with(tgvEdgeProtectionGroupBox) {
 		title = "TGV Edge Protection Determination";
 		sizer = new VerticalSizer;
@@ -815,23 +815,23 @@ function customizeDialog() {
 	// denoise edge protection detection end
 
 	// denoise settings
-	let tgvSettingsGroupBox = new GroupBox(dialog);
+	let tgvSettingsGroupBox = new GroupBox(GlobalDialog);
 	with(tgvSettingsGroupBox) {
 		title = "TGV Settings";
 		sizer = new VerticalSizer;
 		sizer.scaledSpacing = 5;
 		sizer.scaledMargin = 5;
 		sizer.addItem(tgvDenoiseSizer);
-		sizer.addItem(dialog.tgvStrengthSlider);
-		sizer.addItem(dialog.tgvSmoothnessSlider);
-		sizer.addItem(dialog.tgvIterationsSlider);
+		sizer.addItem(GlobalDialog.tgvStrengthSlider);
+		sizer.addItem(GlobalDialog.tgvSmoothnessSlider);
+		sizer.addItem(GlobalDialog.tgvIterationsSlider);
 	}
 
-	dialog.resetTgvSettingsButton = new PushButton(dialog);
-	with (dialog.resetTgvSettingsButton) {
+	GlobalDialog.resetTgvSettingsButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.resetTgvSettingsButton) {
 		text = "Reset TGV Settings";
 		toolTip = "Reset TGV to default settings";
-		icon = dialog.scaledResource(":/icons/debug-restart.png");
+		icon = GlobalDialog.scaledResource(":/icons/debug-restart.png");
 		onClick = function () {
 			CurrentProcessingInfo.tgvStrength = 2;
 			CurrentProcessingInfo.tgvDenoiseSupport = 0;
@@ -843,13 +843,13 @@ function customizeDialog() {
 	tgvControl.sizer.addItem(nrDisclaimer);
 	tgvControl.sizer.addItem(tgvEdgeProtectionGroupBox);
 	tgvControl.sizer.addItem(tgvSettingsGroupBox);
-	tgvControl.sizer.addItem(dialog.resetTgvSettingsButton);
+	tgvControl.sizer.addItem(GlobalDialog.resetTgvSettingsButton);
 	tgvControl.sizer.addStretch();
 	// #endregion "TGV"
 
 	// #region "MMT"
 
-	let mmtControl = new GroupBox(dialog);
+	let mmtControl = new GroupBox(GlobalDialog);
 	with(mmtControl) {
 		sizer = new VerticalSizer;
 		sizer.scaledSpacing = 4;
@@ -865,7 +865,7 @@ function customizeDialog() {
 		}
 	}
 
-	let mmtDisclaimer = new Label(dialog);
+	let mmtDisclaimer = new Label(GlobalDialog);
 	with (mmtDisclaimer) {
 		frameStyle = FrameStyle_Box;
 		wordWrapping = true;
@@ -874,19 +874,19 @@ function customizeDialog() {
 		text = "MultiScaleMedianTransform is ideally run after the TGV denoise to get rid of possible uneven larger scale noise structures generated by TGVDenoise.";
 	}
 
-	let mmtSliderLabel_str = new Label(dialog);
+	let mmtSliderLabel_str = new Label(GlobalDialog);
 	with(mmtSliderLabel_str){
 		text = "Layer    Strength"
 	}
 
-	let mmtSliderLabel_thr = new Label(dialog);
+	let mmtSliderLabel_thr = new Label(GlobalDialog);
 	with(mmtSliderLabel_thr){
 		text = "   Threshold"
 	}
 
 
-	dialog.mmtStrSlider_1 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_1){
+	GlobalDialog.mmtStrSlider_1 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_1){
 		label.text = "1   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -902,8 +902,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_1 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_1){
+	GlobalDialog.mmtThrSlider_1 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_1){
 		//label.text = "1";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -920,8 +920,8 @@ function customizeDialog() {
 	}
 
 
-	dialog.mmtStrSlider_2 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_2){
+	GlobalDialog.mmtStrSlider_2 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_2){
 		label.text = "2   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -937,8 +937,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_2 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_2){
+	GlobalDialog.mmtThrSlider_2 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_2){
 		//label.text = "2";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -955,8 +955,8 @@ function customizeDialog() {
 	}
 
 
-	dialog.mmtStrSlider_3 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_3){
+	GlobalDialog.mmtStrSlider_3 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_3){
 		label.text = "3   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -972,8 +972,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_3 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_3){
+	GlobalDialog.mmtThrSlider_3 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_3){
 		//label.text = "3";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -989,8 +989,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.mmtStrSlider_4 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_4){
+	GlobalDialog.mmtStrSlider_4 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_4){
 		label.text = "4   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -1006,8 +1006,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_4 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_4){
+	GlobalDialog.mmtThrSlider_4 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_4){
 		//label.text = "4";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -1024,8 +1024,8 @@ function customizeDialog() {
 	}
 
 
-	dialog.mmtStrSlider_5 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_5){
+	GlobalDialog.mmtStrSlider_5 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_5){
 		label.text = "5   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -1041,8 +1041,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_5 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_5){
+	GlobalDialog.mmtThrSlider_5 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_5){
 		//label.text = "5";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -1059,8 +1059,8 @@ function customizeDialog() {
 	}
 
 
-	dialog.mmtStrSlider_6 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_6){
+	GlobalDialog.mmtStrSlider_6 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_6){
 		label.text = "6   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -1076,8 +1076,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_6 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_6){
+	GlobalDialog.mmtThrSlider_6 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_6){
 		//label.text = "6";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -1093,8 +1093,8 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.mmtStrSlider_7 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_7){
+	GlobalDialog.mmtStrSlider_7 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_7){
 		label.text = "7   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -1110,8 +1110,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_7 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_7){
+	GlobalDialog.mmtThrSlider_7 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_7){
 		//label.text = "7";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -1128,8 +1128,8 @@ function customizeDialog() {
 	}
 
 
-	dialog.mmtStrSlider_8 = new NumericControl(dialog);
-	with (dialog.mmtStrSlider_8){
+	GlobalDialog.mmtStrSlider_8 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtStrSlider_8){
 		label.text = "8   ";
 		label.minWidth = 10;
 		setRange(0.01, 1);
@@ -1145,8 +1145,8 @@ function customizeDialog() {
 	}
 	
 
-	dialog.mmtThrSlider_8 = new NumericControl(dialog);
-	with (dialog.mmtThrSlider_8){
+	GlobalDialog.mmtThrSlider_8 = new NumericControl(GlobalDialog);
+	with (GlobalDialog.mmtThrSlider_8){
 		//label.text = "8";
 		label.minWidth = 10;
 		setRange(0.01, 10);
@@ -1164,41 +1164,41 @@ function customizeDialog() {
 
 	
 
-	let mmtStrSizer = new VerticalSizer(dialog);
+	let mmtStrSizer = new VerticalSizer(GlobalDialog);
 	with(mmtStrSizer){
 		addItem(mmtSliderLabel_str);
-		addItem(dialog.mmtStrSlider_1);
-		addItem(dialog.mmtStrSlider_2);
-		addItem(dialog.mmtStrSlider_3);
-		addItem(dialog.mmtStrSlider_4);
-		addItem(dialog.mmtStrSlider_5);
-		addItem(dialog.mmtStrSlider_6);
-		addItem(dialog.mmtStrSlider_7);
-		addItem(dialog.mmtStrSlider_8);
+		addItem(GlobalDialog.mmtStrSlider_1);
+		addItem(GlobalDialog.mmtStrSlider_2);
+		addItem(GlobalDialog.mmtStrSlider_3);
+		addItem(GlobalDialog.mmtStrSlider_4);
+		addItem(GlobalDialog.mmtStrSlider_5);
+		addItem(GlobalDialog.mmtStrSlider_6);
+		addItem(GlobalDialog.mmtStrSlider_7);
+		addItem(GlobalDialog.mmtStrSlider_8);
 	}
 
-	let mmtThrSizer = new VerticalSizer(dialog);
+	let mmtThrSizer = new VerticalSizer(GlobalDialog);
 	with(mmtThrSizer){
 		addItem(mmtSliderLabel_thr);
-		addItem(dialog.mmtThrSlider_1);
-		addItem(dialog.mmtThrSlider_2);
-		addItem(dialog.mmtThrSlider_3);
-		addItem(dialog.mmtThrSlider_4);
-		addItem(dialog.mmtThrSlider_5);
-		addItem(dialog.mmtThrSlider_6);
-		addItem(dialog.mmtThrSlider_7);
-		addItem(dialog.mmtThrSlider_8);
+		addItem(GlobalDialog.mmtThrSlider_1);
+		addItem(GlobalDialog.mmtThrSlider_2);
+		addItem(GlobalDialog.mmtThrSlider_3);
+		addItem(GlobalDialog.mmtThrSlider_4);
+		addItem(GlobalDialog.mmtThrSlider_5);
+		addItem(GlobalDialog.mmtThrSlider_6);
+		addItem(GlobalDialog.mmtThrSlider_7);
+		addItem(GlobalDialog.mmtThrSlider_8);
 	}
 
-	let mmtSizer = new HorizontalSizer(dialog);
+	let mmtSizer = new HorizontalSizer(GlobalDialog);
 	mmtSizer.addItem(mmtStrSizer);
 	mmtSizer.addItem(mmtThrSizer);
 
-	dialog.resetMmtButton = new PushButton(dialog);
-	with (dialog.resetMmtButton) {
+	GlobalDialog.resetMmtButton = new PushButton(GlobalDialog);
+	with (GlobalDialog.resetMmtButton) {
 		text = "Reset MMT Settings";
 		toolTip = "Reset MMT to default settings";
-		icon = dialog.scaledResource(":/icons/debug-restart.png");
+		icon = GlobalDialog.scaledResource(":/icons/debug-restart.png");
 		onClick = function () {
 			CurrentProcessingInfo.TgvMmtThr[0] = 10;
 			CurrentProcessingInfo.TgvMmtThr[1] = 10;
@@ -1221,13 +1221,13 @@ function customizeDialog() {
 
 	mmtControl.sizer.addItem(mmtDisclaimer);
 	mmtControl.sizer.addItem(mmtSizer);
-	mmtControl.sizer.addItem(dialog.resetMmtButton);
+	mmtControl.sizer.addItem(GlobalDialog.resetMmtButton);
 	mmtControl.sizer.addStretch();
 
 	// #endregion "MMT"
 
-	dialog.closeMaskImageCheckBox = new CheckBox(dialog);
-	with(dialog.closeMaskImageCheckBox) {
+	GlobalDialog.closeMaskImageCheckBox = new CheckBox(GlobalDialog);
+	with(GlobalDialog.closeMaskImageCheckBox) {
 		text = "Close Mask Images after Execution";
 		toolTip = "Close all generated masks after script has been executed";
 		bindings = function() {
@@ -1238,38 +1238,38 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.masksButton = new PushButton(dialog);
-	with(dialog.masksButton) {
+	GlobalDialog.masksButton = new PushButton(GlobalDialog);
+	with(GlobalDialog.masksButton) {
 		text = "Create Masks Only";
-		icon = dialog.scaledResource(":/icons/ok.png");
+		icon = GlobalDialog.scaledResource(":/icons/ok.png");
 		bindings = function() {
 			this.enabled = !CurrentProcessingInfo.closeMaskImages;
 		}
 		onClick = function () {
 			CurrentProcessingInfo.masksOnly = true;
-			dialog.dialog.ok();
+			GlobalDialog.dialog.ok();
 		}
 	}
 
-	dialog.processButton = new PushButton(dialog);
-	with(dialog.processButton) {
+	GlobalDialog.processButton = new PushButton(GlobalDialog);
+	with(GlobalDialog.processButton) {
 		text = "Create Masks and Denoise Processes";
-		icon = dialog.scaledResource(":/icons/ok.png");
+		icon = GlobalDialog.scaledResource(":/icons/ok.png");
 		bindings = function() {
-			this.enabled = dialog.canRun();
+			this.enabled = GlobalDialog.canRun();
 		}
 		onClick = function () {
 			CurrentProcessingInfo.tgvCreateProcessOnly = true;
-			dialog.dialog.ok();
+			GlobalDialog.dialog.ok();
 		}
 	}
 
-	dialog.runAndCloseGroupBox.sizer.insertItem(0, dialog.closeMaskImageCheckBox);
-	dialog.runAndCloseGroupBox.sizer.insertItem(1, dialog.masksButton);
-	dialog.runAndCloseGroupBox.sizer.insertItem(2, dialog.processButton);
+	GlobalDialog.runAndCloseGroupBox.sizer.insertItem(0, GlobalDialog.closeMaskImageCheckBox);
+	GlobalDialog.runAndCloseGroupBox.sizer.insertItem(1, GlobalDialog.masksButton);
+	GlobalDialog.runAndCloseGroupBox.sizer.insertItem(2, GlobalDialog.processButton);
 
-	dialog.replacementTabBox = new TabBox(dialog);
-	with(dialog.replacementTabBox) {
+	GlobalDialog.replacementTabBox = new TabBox(GlobalDialog);
+	with(GlobalDialog.replacementTabBox) {
 		addPage(maskControl, "Mask Settings");
 		addPage(tgvControl, "TGV Settings");
 		addPage(mmtControl, "MMT Settings");
@@ -1280,10 +1280,10 @@ function customizeDialog() {
 		}
 	}
 
-	dialog.controlSizer.insertItem(3, dialog.replacementTabBox);
+	GlobalDialog.controlSizer.insertItem(3, GlobalDialog.replacementTabBox);
 
-	dialog.controlSizer.removeItem(dialog.mainControl);
-	dialog.mainControl.hide();
+	GlobalDialog.controlSizer.removeItem(GlobalDialog.mainControl);
+	GlobalDialog.mainControl.hide();
 }
 
 function getViewName(view) {
